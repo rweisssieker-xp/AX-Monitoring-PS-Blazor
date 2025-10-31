@@ -1,0 +1,340 @@
+{
+  "format": 1,
+  "restore": {
+    "D:\\temp\\AX-Monitoring-PS-Blazor\\AX-Monitoring-Blazor\\AX-Monitoring-Blazor.Server\\AX-Monitoring-Blazor.Server.csproj": {}
+  },
+  "projects": {
+    "D:\\temp\\AX-Monitoring-PS-Blazor\\AX-Monitoring-Blazor\\AX-Monitoring-Blazor.Core\\AX-Monitoring-Blazor.Core.csproj": {
+      "version": "1.0.0",
+      "restore": {
+        "projectUniqueName": "D:\\temp\\AX-Monitoring-PS-Blazor\\AX-Monitoring-Blazor\\AX-Monitoring-Blazor.Core\\AX-Monitoring-Blazor.Core.csproj",
+        "projectName": "AX-Monitoring-Blazor.Core",
+        "projectPath": "D:\\temp\\AX-Monitoring-PS-Blazor\\AX-Monitoring-Blazor\\AX-Monitoring-Blazor.Core\\AX-Monitoring-Blazor.Core.csproj",
+        "packagesPath": "C:\\Users\\reinerw\\.nuget\\packages\\",
+        "outputPath": "D:\\temp\\AX-Monitoring-PS-Blazor\\AX-Monitoring-Blazor\\AX-Monitoring-Blazor.Core\\obj\\",
+        "projectStyle": "PackageReference",
+        "fallbackFolders": [
+          "C:\\Program Files\\DevExpress 24.2\\Components\\Offline Packages",
+          "C:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages"
+        ],
+        "configFilePaths": [
+          "C:\\Users\\reinerw\\AppData\\Roaming\\NuGet\\NuGet.Config",
+          "C:\\Program Files (x86)\\NuGet\\Config\\DevExpress 24.2.config",
+          "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.FallbackLocation.config",
+          "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.Offline.config"
+        ],
+        "originalTargetFrameworks": [
+          "net9.0"
+        ],
+        "sources": {
+          "C:\\Program Files (x86)\\Microsoft SDKs\\NuGetPackages\\": {},
+          "C:\\Program Files\\DevExpress 24.2\\Components\\System\\Components\\Packages": {},
+          "https://api.nuget.org/v3/index.json": {}
+        },
+        "frameworks": {
+          "net9.0": {
+            "targetAlias": "net9.0",
+            "projectReferences": {
+              "D:\\temp\\AX-Monitoring-PS-Blazor\\AX-Monitoring-Blazor\\AX-Monitoring-Blazor.Infrastructure\\AX-Monitoring-Blazor.Infrastructure.csproj": {
+                "projectPath": "D:\\temp\\AX-Monitoring-PS-Blazor\\AX-Monitoring-Blazor\\AX-Monitoring-Blazor.Infrastructure\\AX-Monitoring-Blazor.Infrastructure.csproj"
+              },
+              "D:\\temp\\AX-Monitoring-PS-Blazor\\AX-Monitoring-Blazor\\AX-Monitoring-Blazor.Shared\\AX-Monitoring-Blazor.Shared.csproj": {
+                "projectPath": "D:\\temp\\AX-Monitoring-PS-Blazor\\AX-Monitoring-Blazor\\AX-Monitoring-Blazor.Shared\\AX-Monitoring-Blazor.Shared.csproj"
+              }
+            }
+          }
+        },
+        "warningProperties": {
+          "warnAsError": [
+            "NU1605"
+          ]
+        },
+        "restoreAuditProperties": {
+          "enableAudit": "true",
+          "auditLevel": "low",
+          "auditMode": "direct"
+        },
+        "SdkAnalysisLevel": "9.0.300"
+      },
+      "frameworks": {
+        "net9.0": {
+          "targetAlias": "net9.0",
+          "imports": [
+            "net461",
+            "net462",
+            "net47",
+            "net471",
+            "net472",
+            "net48",
+            "net481"
+          ],
+          "assetTargetFallback": true,
+          "warn": true,
+          "frameworkReferences": {
+            "Microsoft.NETCore.App": {
+              "privateAssets": "all"
+            }
+          },
+          "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\9.0.306/PortableRuntimeIdentifierGraph.json"
+        }
+      }
+    },
+    "D:\\temp\\AX-Monitoring-PS-Blazor\\AX-Monitoring-Blazor\\AX-Monitoring-Blazor.Infrastructure\\AX-Monitoring-Blazor.Infrastructure.csproj": {
+      "version": "1.0.0",
+      "restore": {
+        "projectUniqueName": "D:\\temp\\AX-Monitoring-PS-Blazor\\AX-Monitoring-Blazor\\AX-Monitoring-Blazor.Infrastructure\\AX-Monitoring-Blazor.Infrastructure.csproj",
+        "projectName": "AX-Monitoring-Blazor.Infrastructure",
+        "projectPath": "D:\\temp\\AX-Monitoring-PS-Blazor\\AX-Monitoring-Blazor\\AX-Monitoring-Blazor.Infrastructure\\AX-Monitoring-Blazor.Infrastructure.csproj",
+        "packagesPath": "C:\\Users\\reinerw\\.nuget\\packages\\",
+        "outputPath": "D:\\temp\\AX-Monitoring-PS-Blazor\\AX-Monitoring-Blazor\\AX-Monitoring-Blazor.Infrastructure\\obj\\",
+        "projectStyle": "PackageReference",
+        "fallbackFolders": [
+          "C:\\Program Files\\DevExpress 24.2\\Components\\Offline Packages",
+          "C:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages"
+        ],
+        "configFilePaths": [
+          "C:\\Users\\reinerw\\AppData\\Roaming\\NuGet\\NuGet.Config",
+          "C:\\Program Files (x86)\\NuGet\\Config\\DevExpress 24.2.config",
+          "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.FallbackLocation.config",
+          "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.Offline.config"
+        ],
+        "originalTargetFrameworks": [
+          "net9.0"
+        ],
+        "sources": {
+          "C:\\Program Files (x86)\\Microsoft SDKs\\NuGetPackages\\": {},
+          "C:\\Program Files\\DevExpress 24.2\\Components\\System\\Components\\Packages": {},
+          "https://api.nuget.org/v3/index.json": {}
+        },
+        "frameworks": {
+          "net9.0": {
+            "targetAlias": "net9.0",
+            "projectReferences": {}
+          }
+        },
+        "warningProperties": {
+          "warnAsError": [
+            "NU1605"
+          ]
+        },
+        "restoreAuditProperties": {
+          "enableAudit": "true",
+          "auditLevel": "low",
+          "auditMode": "direct"
+        },
+        "SdkAnalysisLevel": "9.0.300"
+      },
+      "frameworks": {
+        "net9.0": {
+          "targetAlias": "net9.0",
+          "dependencies": {
+            "Azure.AI.OpenAI": {
+              "target": "Package",
+              "version": "[2.1.0, )"
+            },
+            "Microsoft.AspNetCore.Authentication.JwtBearer": {
+              "target": "Package",
+              "version": "[9.0.10, )"
+            },
+            "Microsoft.EntityFrameworkCore.SqlServer": {
+              "target": "Package",
+              "version": "[9.0.10, )"
+            },
+            "Microsoft.Extensions.Configuration": {
+              "target": "Package",
+              "version": "[9.0.10, )"
+            },
+            "Microsoft.Extensions.Logging": {
+              "target": "Package",
+              "version": "[9.0.10, )"
+            },
+            "Quartz": {
+              "target": "Package",
+              "version": "[3.15.1, )"
+            },
+            "Quartz.Extensions.DependencyInjection": {
+              "target": "Package",
+              "version": "[3.15.1, )"
+            },
+            "YamlDotNet": {
+              "target": "Package",
+              "version": "[16.3.0, )"
+            }
+          },
+          "imports": [
+            "net461",
+            "net462",
+            "net47",
+            "net471",
+            "net472",
+            "net48",
+            "net481"
+          ],
+          "assetTargetFallback": true,
+          "warn": true,
+          "frameworkReferences": {
+            "Microsoft.NETCore.App": {
+              "privateAssets": "all"
+            }
+          },
+          "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\9.0.306/PortableRuntimeIdentifierGraph.json"
+        }
+      }
+    },
+    "D:\\temp\\AX-Monitoring-PS-Blazor\\AX-Monitoring-Blazor\\AX-Monitoring-Blazor.Server\\AX-Monitoring-Blazor.Server.csproj": {
+      "version": "1.0.0",
+      "restore": {
+        "projectUniqueName": "D:\\temp\\AX-Monitoring-PS-Blazor\\AX-Monitoring-Blazor\\AX-Monitoring-Blazor.Server\\AX-Monitoring-Blazor.Server.csproj",
+        "projectName": "AX-Monitoring-Blazor.Server",
+        "projectPath": "D:\\temp\\AX-Monitoring-PS-Blazor\\AX-Monitoring-Blazor\\AX-Monitoring-Blazor.Server\\AX-Monitoring-Blazor.Server.csproj",
+        "packagesPath": "C:\\Users\\reinerw\\.nuget\\packages\\",
+        "outputPath": "D:\\temp\\AX-Monitoring-PS-Blazor\\AX-Monitoring-Blazor\\AX-Monitoring-Blazor.Server\\obj\\",
+        "projectStyle": "PackageReference",
+        "fallbackFolders": [
+          "C:\\Program Files\\DevExpress 24.2\\Components\\Offline Packages",
+          "C:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages"
+        ],
+        "configFilePaths": [
+          "C:\\Users\\reinerw\\AppData\\Roaming\\NuGet\\NuGet.Config",
+          "C:\\Program Files (x86)\\NuGet\\Config\\DevExpress 24.2.config",
+          "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.FallbackLocation.config",
+          "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.Offline.config"
+        ],
+        "originalTargetFrameworks": [
+          "net9.0"
+        ],
+        "sources": {
+          "C:\\Program Files (x86)\\Microsoft SDKs\\NuGetPackages\\": {},
+          "C:\\Program Files\\DevExpress 24.2\\Components\\System\\Components\\Packages": {},
+          "https://api.nuget.org/v3/index.json": {}
+        },
+        "frameworks": {
+          "net9.0": {
+            "targetAlias": "net9.0",
+            "projectReferences": {
+              "D:\\temp\\AX-Monitoring-PS-Blazor\\AX-Monitoring-Blazor\\AX-Monitoring-Blazor.Core\\AX-Monitoring-Blazor.Core.csproj": {
+                "projectPath": "D:\\temp\\AX-Monitoring-PS-Blazor\\AX-Monitoring-Blazor\\AX-Monitoring-Blazor.Core\\AX-Monitoring-Blazor.Core.csproj"
+              },
+              "D:\\temp\\AX-Monitoring-PS-Blazor\\AX-Monitoring-Blazor\\AX-Monitoring-Blazor.Infrastructure\\AX-Monitoring-Blazor.Infrastructure.csproj": {
+                "projectPath": "D:\\temp\\AX-Monitoring-PS-Blazor\\AX-Monitoring-Blazor\\AX-Monitoring-Blazor.Infrastructure\\AX-Monitoring-Blazor.Infrastructure.csproj"
+              },
+              "D:\\temp\\AX-Monitoring-PS-Blazor\\AX-Monitoring-Blazor\\AX-Monitoring-Blazor.Shared\\AX-Monitoring-Blazor.Shared.csproj": {
+                "projectPath": "D:\\temp\\AX-Monitoring-PS-Blazor\\AX-Monitoring-Blazor\\AX-Monitoring-Blazor.Shared\\AX-Monitoring-Blazor.Shared.csproj"
+              }
+            }
+          }
+        },
+        "warningProperties": {
+          "warnAsError": [
+            "NU1605"
+          ]
+        },
+        "restoreAuditProperties": {
+          "enableAudit": "true",
+          "auditLevel": "low",
+          "auditMode": "direct"
+        },
+        "SdkAnalysisLevel": "9.0.300"
+      },
+      "frameworks": {
+        "net9.0": {
+          "targetAlias": "net9.0",
+          "dependencies": {
+            "Microsoft.EntityFrameworkCore.SqlServer": {
+              "target": "Package",
+              "version": "[9.0.10, )"
+            }
+          },
+          "imports": [
+            "net461",
+            "net462",
+            "net47",
+            "net471",
+            "net472",
+            "net48",
+            "net481"
+          ],
+          "assetTargetFallback": true,
+          "warn": true,
+          "frameworkReferences": {
+            "Microsoft.AspNetCore.App": {
+              "privateAssets": "none"
+            },
+            "Microsoft.NETCore.App": {
+              "privateAssets": "all"
+            }
+          },
+          "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\9.0.306/PortableRuntimeIdentifierGraph.json"
+        }
+      }
+    },
+    "D:\\temp\\AX-Monitoring-PS-Blazor\\AX-Monitoring-Blazor\\AX-Monitoring-Blazor.Shared\\AX-Monitoring-Blazor.Shared.csproj": {
+      "version": "1.0.0",
+      "restore": {
+        "projectUniqueName": "D:\\temp\\AX-Monitoring-PS-Blazor\\AX-Monitoring-Blazor\\AX-Monitoring-Blazor.Shared\\AX-Monitoring-Blazor.Shared.csproj",
+        "projectName": "AX-Monitoring-Blazor.Shared",
+        "projectPath": "D:\\temp\\AX-Monitoring-PS-Blazor\\AX-Monitoring-Blazor\\AX-Monitoring-Blazor.Shared\\AX-Monitoring-Blazor.Shared.csproj",
+        "packagesPath": "C:\\Users\\reinerw\\.nuget\\packages\\",
+        "outputPath": "D:\\temp\\AX-Monitoring-PS-Blazor\\AX-Monitoring-Blazor\\AX-Monitoring-Blazor.Shared\\obj\\",
+        "projectStyle": "PackageReference",
+        "fallbackFolders": [
+          "C:\\Program Files\\DevExpress 24.2\\Components\\Offline Packages",
+          "C:\\Program Files (x86)\\Microsoft Visual Studio\\Shared\\NuGetPackages"
+        ],
+        "configFilePaths": [
+          "C:\\Users\\reinerw\\AppData\\Roaming\\NuGet\\NuGet.Config",
+          "C:\\Program Files (x86)\\NuGet\\Config\\DevExpress 24.2.config",
+          "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.FallbackLocation.config",
+          "C:\\Program Files (x86)\\NuGet\\Config\\Microsoft.VisualStudio.Offline.config"
+        ],
+        "originalTargetFrameworks": [
+          "net9.0"
+        ],
+        "sources": {
+          "C:\\Program Files (x86)\\Microsoft SDKs\\NuGetPackages\\": {},
+          "C:\\Program Files\\DevExpress 24.2\\Components\\System\\Components\\Packages": {},
+          "https://api.nuget.org/v3/index.json": {}
+        },
+        "frameworks": {
+          "net9.0": {
+            "targetAlias": "net9.0",
+            "projectReferences": {}
+          }
+        },
+        "warningProperties": {
+          "warnAsError": [
+            "NU1605"
+          ]
+        },
+        "restoreAuditProperties": {
+          "enableAudit": "true",
+          "auditLevel": "low",
+          "auditMode": "direct"
+        },
+        "SdkAnalysisLevel": "9.0.300"
+      },
+      "frameworks": {
+        "net9.0": {
+          "targetAlias": "net9.0",
+          "imports": [
+            "net461",
+            "net462",
+            "net47",
+            "net471",
+            "net472",
+            "net48",
+            "net481"
+          ],
+          "assetTargetFallback": true,
+          "warn": true,
+          "frameworkReferences": {
+            "Microsoft.NETCore.App": {
+              "privateAssets": "all"
+            }
+          },
+          "runtimeIdentifierGraphPath": "C:\\Program Files\\dotnet\\sdk\\9.0.306/PortableRuntimeIdentifierGraph.json"
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Blocking Analysis - AX Monitor</title>
+    <link rel="stylesheet" href="/static/css/styles.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+</head>
+<body>
+    <div class="container">
+        <!-- Sidebar Navigation -->
+        <nav class="sidebar">
+            <div class="sidebar-header">
+                <h2>📊 AX Monitor</h2>
+                <div class="env-badge env-{{Environment}}">{{Environment}}</div>
+            </div>
+            <ul class="nav-menu">
+                <li><a href="/"><span class="icon">🏠</span> Dashboard</a></li>
+                <li><a href="/batch"><span class="icon">⚙️</span> Batch Jobs</a></li>
+                <li><a href="/sessions"><span class="icon">👥</span> Sessions</a></li>
+                <li><a href="/blocking" class="active"><span class="icon">🔒</span> Blocking</a></li>
+                <li><a href="/sql-health"><span class="icon">💻</span> SQL Health</a></li>
+                <li><a href="/alerts"><span class="icon">🚨</span> Alerts</a></li>
+                <li><a href="/ai-assistant"><span class="icon">🤖</span> AI Assistant</a></li>
+            </ul>
+            <div class="sidebar-footer">
+                <p>Version {{Version}}</p>
+                <p>Powered by Pode</p>
+            </div>
+        </nav>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <header class="page-header">
+                <h1>Blocking Chain Analysis</h1>
+                <div class="header-actions">
+                    <button class="btn btn-secondary" onclick="refreshData()">
+                        <span class="icon">🔄</span> Refresh
+                    </button>
+                    <div class="last-update">Last updated: <span id="lastUpdate">--:--:--</span></div>
+                </div>
+            </header>
+
+            <!-- Blocking KPI Cards -->
+            <section class="kpi-section">
+                <div class="kpi-grid">
+                    <div class="kpi-card">
+                        <div class="kpi-icon" style="background: #1f77b4;">🔒</div>
+                        <div class="kpi-content">
+                            <h3>Active Chains</h3>
+                            <div class="kpi-value" id="activeChains">--</div>
+                            <div class="kpi-change" id="activeChainsChange">--</div>
+                        </div>
+                    </div>
+                    
+                    <div class="kpi-card">
+                        <div class="kpi-icon" style="background: #dc3545;">⏱️</div>
+                        <div class="kpi-content">
+                            <h3>Avg. Duration</h3>
+                            <div class="kpi-value" id="avgDuration">-- s</div>
+                            <div class="kpi-change" id="avgDurationChange">--</div>
+                        </div>
+                    </div>
+                    
+                    <div class="kpi-card">
+                        <div class="kpi-icon" style="background: #28a745;">⚡</div>
+                        <div class="kpi-content">
+                            <h3>Risk Level</h3>
+                            <div class="kpi-value" id="riskLevel">--</div>
+                            <div class="kpi-change" id="riskLevelChange">--</div>
+                        </div>
+                    </div>
+                    
+                    <div class="kpi-card">
+                        <div class="kpi-icon" style="background: #ffc107;">🎯</div>
+                        <div class="kpi-content">
+                            <h3>Root Causes</h3>
+                            <div class="kpi-value" id="rootCauses">--</div>
+                            <div class="kpi-change" id="rootCausesChange">--</div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Blocking Chains Visualization -->
+            <section class="blocking-section">
+                <h2>Blocking Chains</h2>
+                <div class="blocking-controls">
+                    <div class="filter-group">
+                        <select id="chainFilter">
+                            <option value="all">All Chains</option>
+                            <option value="high">High Priority</option>
+                            <option value="medium">Medium Priority</option>
+                            <option value="low">Low Priority</option>
+                        </select>
+                    </div>
+                    <div class="action-buttons">
+                        <button class="btn btn-primary">Resolve All</button>
+                        <button class="btn btn-secondary">Export</button>
+                    </div>
+                </div>
+                
+                <div id="blockingDiagram" class="blocking-diagram">
+                    <div class="no-blocking">
+                        <div class="status-icon">✅</div>
+                        <h3>No Active Blocking Chains</h3>
+                        <p>No sessions are currently blocking other sessions</p>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Blocking Details Table -->
+            <section class="data-section">
+                <h2>Blocking Details</h2>
+                <div class="table-container">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Chain ID</th>
+                                <th>Root Blocker</th>
+                                <th>Blocked Count</th>
+                                <th>Duration</th>
+                                <th>Impact</th>
+                                <th>SQL Text</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="blockingTableBody">
+                            <tr><td colspan="7" class="loading">Loading blocking data...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+
+        </main>
+    </div>
+
+    <script src="/static/js/dashboard.js"></script>
+    <script>
+        // Specific script for blocking analysis
+        async function loadBlockingData() {
+            try {
+                const response = await axios.get('/api/blocking');
+                updateBlockingTable(response.data.data);
+                updateBlockingKPIs(response.data.data);
+                updateBlockingDiagram(response.data.data);
+            } catch (error) {
+                console.error('Error loading blocking data:', error);
+                showError('Failed to load blocking data');
+            }
+        }
+
+        function updateBlockingTable(data) {
+            const tableBody = document.getElementById('blockingTableBody');
+            
+            if (!data || data.length === 0) {
+                tableBody.innerHTML = '<tr><td colspan="7" class="no-data">No blocking chains detected</td></tr>';
+                return;
+            }
+
+            // Sort by blocked count (highest first)
+            const sortedData = [...data].sort((a, b) => (b.BlockedCount || 0) - (a.BlockedCount || 0));
+            
+            const rows = sortedData.map(chain => {
+                const duration = chain.Duration ? formatDuration(chain.Duration) : '--';
+                const impact = chain.Impact || 0;
+                const impactClass = getImpactClass(impact);
+                
+                return `
+                    <tr>
+                        <td><a href="#" onclick="showChainDetails('${chain.ChainId}')">${chain.ChainId || '--'}</a></td>
+                        <td>${chain.RootBlocker || '--'}</td>
+                        <td>${chain.BlockedCount || 0}</td>
+                        <td>${duration}</td>
+                        <td><span class="impact-badge ${impactClass}">${impact}%</span></td>
+                        <td class="sql-text">${truncateText(chain.SQLText || '--', 50)}</td>
+                        <td>
+                            <button class="btn btn-small btn-primary">Resolve</button>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+            
+            tableBody.innerHTML = rows;
+        }
+        
+        function updateBlockingKPIs(data) {
+            if (!data) return;
+            
+            const activeChains = data.length;
+            const avgDuration = data.length > 0 
+                ? (data.reduce((sum, chain) => sum + (chain.Duration || 0), 0) / data.length).toFixed(1)
+                : 0;
+            
+            // Calculate risk level based on number of chains and blocked sessions
+            const totalBlocked = data.reduce((sum, chain) => sum + (chain.BlockedCount || 0), 0);
+            const riskLevel = getRiskLevel(totalBlocked);
+            
+            // Count root causes
+            const rootCauses = [...new Set(data.map(chain => chain.RootCause))].length;
+            
+            document.getElementById('activeChains').textContent = activeChains;
+            document.getElementById('avgDuration').textContent = avgDuration + ' s';
+            document.getElementById('riskLevel').textContent = riskLevel;
+            document.getElementById('rootCauses').textContent = rootCauses;
+        }
+        
+        function updateBlockingDiagram(data) {
+            const diagram = document.getElementById('blockingDiagram');
+            
+            if (!data || data.length === 0) {
+                diagram.innerHTML = `
+                    <div class="no-blocking">
+                        <div class="status-icon">✅</div>
+                        <h3>No Active Blocking Chains</h3>
+                        <p>No sessions are currently blocking other sessions</p>
+                    </div>
+                `;
+                return;
+            }
+            
+            // Create a simplified visualization of blocking chains
+            diagram.innerHTML = `
+                <div class="blocking-visualizations">
+                    ${data.map((chain, index) => `
+                        <div class="blocking-chain">
+                            <div class="chain-title">
+                                <span class="chain-id">Chain ${index + 1}</span>
+                                <span class="chain-duration">${formatDuration(chain.Duration || 0)}</span>
+                            </div>
+                            <div class="chain-steps">
+                                ${createChainVisualization(chain)}
+                            </div>
+                        </div>
+                    `).join('')}
+                </div>
+            `;
+        }
+        
+        function createChainVisualization(chain) {
+            // This is a simplified visualization - in a real implementation, 
+            // you would have more detailed blocking chain data
+            return `
+                <div class="chain-step blocker">
+                    <div class="session-info">
+                        <div class="session-id">${chain.RootBlocker || 'Root'}</div>
+                        <div class="session-details">Blocked ${chain.BlockedCount || 0} sessions</div>
+                    </div>
+                    <div class="arrow">➡️</div>
+                </div>
+                ${Array(chain.BlockedCount || 0).fill().map((_, i) => `
+                    <div class="chain-step blocked">
+                        <div class="session-info">
+                            <div class="session-id">Session ${i + 1}</div>
+                            <div class="session-details">Blocked</div>
+                        </div>
+                        ${i < (chain.BlockedCount || 0) - 1 ? '<div class="arrow">➡️</div>' : ''}
+                    </div>
+                `).join('')}
+            `;
+        }
+        
+        function showChainDetails(chainId) {
+            alert(`Detailed view for chain: ${chainId}`);
+            // In a real implementation, this would show detailed chain information
+        }
+        
+        function getImpactClass(impact) {
+            if (impact > 75) return 'impact-high';
+            if (impact > 50) return 'impact-medium';
+            if (impact > 25) return 'impact-low';
+            return 'impact-none';
+        }
+        
+        function getRiskLevel(blockedSessions) {
+            if (blockedSessions > 50) return 'Critical';
+            if (blockedSessions > 20) return 'High';
+            if (blockedSessions > 5) return 'Medium';
+            return 'Low';
+        }
+        
+        function truncateText(text, maxLength) {
+            if (text.length <= maxLength) return text;
+            return text.substring(0, maxLength) + '...';
+        }
+        
+        function formatDuration(seconds) {
+            if (seconds < 60) return seconds + 's';
+            if (seconds < 3600) return Math.floor(seconds / 60) + 'm';
+            return Math.floor(seconds / 3600) + 'h ' + Math.floor((seconds % 3600) / 60) + 'm';
+        }
+        
+        // Override refreshData function for blocking-specific loading
+        function refreshData() {
+            loadBlockingData();
+            updateTimestamp();
+        }
+        
+        // Load data when page loads
+        document.addEventListener('DOMContentLoaded', function() {
+            loadBlockingData();
+            // Set up auto-refresh every 30 seconds
+            setInterval(loadBlockingData, 30000);
+        });
+    </script>
+</body>
+</html>

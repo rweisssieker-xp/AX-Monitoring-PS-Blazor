@@ -1,0 +1,339 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Alerts - AX Monitor</title>
+    <link rel="stylesheet" href="/static/css/styles.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+</head>
+<body>
+    <div class="container">
+        <!-- Sidebar Navigation -->
+        <nav class="sidebar">
+            <div class="sidebar-header">
+                <h2>📊 AX Monitor</h2>
+                <div class="env-badge env-{{Environment}}">{{Environment}}</div>
+            </div>
+            <ul class="nav-menu">
+                <li><a href="/"><span class="icon">🏠</span> Dashboard</a></li>
+                <li><a href="/batch"><span class="icon">⚙️</span> Batch Jobs</a></li>
+                <li><a href="/sessions"><span class="icon">👥</span> Sessions</a></li>
+                <li><a href="/blocking"><span class="icon">🔒</span> Blocking</a></li>
+                <li><a href="/sql-health"><span class="icon">💻</span> SQL Health</a></li>
+                <li><a href="/alerts" class="active"><span class="icon">🚨</span> Alerts</a></li>
+                <li><a href="/ai-assistant"><span class="icon">🤖</span> AI Assistant</a></li>
+            </ul>
+            <div class="sidebar-footer">
+                <p>Version {{Version}}</p>
+                <p>Powered by Pode</p>
+            </div>
+        </nav>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <header class="page-header">
+                <h1>Alert Management</h1>
+                <div class="header-actions">
+                    <button class="btn btn-secondary" onclick="refreshData()">
+                        <span class="icon">🔄</span> Refresh
+                    </button>
+                    <div class="last-update">Last updated: <span id="lastUpdate">--:--:--</span></div>
+                </div>
+            </header>
+
+            <!-- Alert KPI Cards -->
+            <section class="kpi-section">
+                <div class="kpi-grid">
+                    <div class="kpi-card">
+                        <div class="kpi-icon" style="background: #1f77b4;">🚨</div>
+                        <div class="kpi-content">
+                            <h3>Active Alerts</h3>
+                            <div class="kpi-value" id="activeAlerts">--</div>
+                            <div class="kpi-change" id="activeAlertsChange">--</div>
+                        </div>
+                    </div>
+                    
+                    <div class="kpi-card">
+                        <div class="kpi-icon" style="background: #dc3545;">🔴</div>
+                        <div class="kpi-content">
+                            <h3>Critical Alerts</h3>
+                            <div class="kpi-value" id="criticalAlerts">--</div>
+                            <div class="kpi-change" id="criticalAlertsChange">--</div>
+                        </div>
+                    </div>
+                    
+                    <div class="kpi-card">
+                        <div class="kpi-icon" style="background: #ffc107;">🟡</div>
+                        <div class="kpi-content">
+                            <h3>Warning Alerts</h3>
+                            <div class="kpi-value" id="warningAlerts">--</div>
+                            <div class="kpi-change" id="warningAlertsChange">--</div>
+                        </div>
+                    </div>
+                    
+                    <div class="kpi-card">
+                        <div class="kpi-icon" style="background: #28a745;">✅</div>
+                        <div class="kpi-content">
+                            <h3>Resolved Today</h3>
+                            <div class="kpi-value" id="resolvedToday">--</div>
+                            <div class="kpi-change" id="resolvedTodayChange">--</div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Alert Filters -->
+            <section class="filters-section">
+                <div class="filter-group">
+                    <select id="alertTypeFilter">
+                        <option value="all">All Alert Types</option>
+                        <option value="performance">Performance</option>
+                        <option value="availability">Availability</option>
+                        <option value="security">Security</option>
+                        <option value="data">Data</option>
+                    </select>
+                    <select id="severityFilter">
+                        <option value="all">All Severities</option>
+                        <option value="critical">Critical</option>
+                        <option value="warning">Warning</option>
+                        <option value="info">Info</option>
+                    </select>
+                    <select id="statusFilter">
+                        <option value="all">All Status</option>
+                        <option value="active">Active</option>
+                        <option value="acknowledged">Acknowledged</option>
+                        <option value="resolved">Resolved</option>
+                    </select>
+                    <input type="text" id="alertSearch" placeholder="Search alerts...">
+                    <button class="btn btn-primary" id="applyFilters">Apply</button>
+                </div>
+            </section>
+
+            <!-- Alerts List -->
+            <section class="alerts-section">
+                <h2>Alerts</h2>
+                <div id="alertsList" class="alerts-list">
+                    <div class="loading">Loading alerts...</div>
+                </div>
+            </section>
+
+            <!-- Charts -->
+            <section class="charts-section">
+                <h2>Alert Trends</h2>
+                <div class="chart-grid">
+                    <div class="chart-card">
+                        <h3>Alerts by Severity</h3>
+                        <canvas id="severityChart"></canvas>
+                    </div>
+                    <div class="chart-card">
+                        <h3>Alerts by Type</h3>
+                        <canvas id="typeChart"></canvas>
+                    </div>
+                    <div class="chart-card">
+                        <h3>Alerts Over Time</h3>
+                        <canvas id="trendChart"></canvas>
+                    </div>
+                    <div class="chart-card">
+                        <h3>Alert Resolution Time</h3>
+                        <canvas id="resolutionChart"></canvas>
+                    </div>
+                </div>
+            </section>
+
+        </main>
+    </div>
+
+    <script src="/static/js/dashboard.js"></script>
+    <script>
+        // Specific script for alerts
+        async function loadAlertData() {
+            try {
+                const response = await axios.get('/api/alerts');
+                updateAlertsList(response.data.data);
+                updateAlertKPIs(response.data.data);
+            } catch (error) {
+                console.error('Error loading alert data:', error);
+                showError('Failed to load alert data');
+            }
+        }
+
+        function updateAlertsList(alerts) {
+            const alertsList = document.getElementById('alertsList');
+            
+            if (!alerts || alerts.length === 0) {
+                alertsList.innerHTML = '<div class="alert-item info"><div class="alert-message">✅ No alerts in the system</div></div>';
+                return;
+            }
+
+            // Group alerts by status for better organization
+            const activeAlerts = alerts.filter(alert => alert.Status === 'Active');
+            const acknowledgedAlerts = alerts.filter(alert => alert.Status === 'Acknowledged');
+            const resolvedAlerts = alerts.filter(alert => alert.Status === 'Resolved');
+            
+            let html = '';
+            
+            // Show active alerts first
+            if (activeAlerts.length > 0) {
+                html += '<div class="alert-status-section"><h3>Active Alerts</h3>';
+                html += activeAlerts.map(alert => createAlertHtml(alert)).join('');
+                html += '</div>';
+            }
+            
+            // Show acknowledged alerts if any
+            if (acknowledgedAlerts.length > 0) {
+                html += '<div class="alert-status-section"><h3>Acknowledged Alerts</h3>';
+                html += acknowledgedAlerts.map(alert => createAlertHtml(alert)).join('');
+                html += '</div>';
+            }
+            
+            // Show resolved alerts if any
+            if (resolvedAlerts.length > 0) {
+                html += '<div class="alert-status-section"><h3>Resolved Alerts</h3>';
+                html += resolvedAlerts.map(alert => createAlertHtml(alert)).join('');
+                html += '</div>';
+            }
+            
+            alertsList.innerHTML = html;
+        }
+        
+        function createAlertHtml(alert) {
+            const severityClass = alert.Severity.toLowerCase();
+            const icon = getSeverityIcon(alert.Severity);
+            const time = new Date(alert.CreatedAt).toLocaleString();
+            const resolveEnabled = alert.Status === 'Active' || alert.Status === 'Acknowledged';
+            
+            return `
+                <div class="alert-item ${severityClass} ${alert.Status.toLowerCase()}">
+                    <div class="alert-header">
+                        <div class="alert-title">
+                            <span>${icon}</span>
+                            <strong>${alert.AlertType}</strong>
+                            <span class="alert-id">#${alert.Id || '--'}</span>
+                        </div>
+                        <div class="alert-time">${time}</div>
+                    </div>
+                    <div class="alert-message">${alert.Message}</div>
+                    <div class="alert-details">
+                        <div class="alert-meta">
+                            <span class="alert-severity">Severity: ${alert.Severity}</span>
+                            <span class="alert-status">Status: ${alert.Status}</span>
+                        </div>
+                        <div class="alert-actions">
+                            ${alert.Status === 'Active' ? 
+                                `<button class="btn btn-small btn-warning" onclick="acknowledgeAlert('${alert.Id}')">Acknowledge</button>` : 
+                                alert.Status === 'Acknowledged' ? 
+                                `<button class="btn btn-small btn-success" onclick="resolveAlert('${alert.Id}')">Resolve</button>` : 
+                                ''}
+                            ${alert.Status !== 'Resolved' ? `<button class="btn btn-small btn-secondary" onclick="showAlertDetails('${alert.Id}')">Details</button>` : ''}
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+        
+        function updateAlertKPIs(alerts) {
+            if (!alerts) return;
+            
+            const activeAlerts = alerts.filter(alert => alert.Status === 'Active').length;
+            const criticalAlerts = alerts.filter(alert => alert.Status === 'Active' && alert.Severity === 'Critical').length;
+            const warningAlerts = alerts.filter(alert => alert.Status === 'Active' && alert.Severity === 'Warning').length;
+            
+            // Calculate resolved alerts for today
+            const today = new Date();
+            const todayString = today.toISOString().split('T')[0];
+            const resolvedToday = alerts.filter(alert => 
+                alert.Status === 'Resolved' && 
+                alert.UpdatedAt && 
+                new Date(alert.UpdatedAt).toISOString().split('T')[0] === todayString
+            ).length;
+            
+            document.getElementById('activeAlerts').textContent = activeAlerts;
+            document.getElementById('criticalAlerts').textContent = criticalAlerts;
+            document.getElementById('warningAlerts').textContent = warningAlerts;
+            document.getElementById('resolvedToday').textContent = resolvedToday;
+        }
+        
+        async function acknowledgeAlert(alertId) {
+            try {
+                await axios.post(`/api/alerts/${alertId}/acknowledge`);
+                // Refresh the alerts list
+                await loadAlertData();
+                showNotification('Alert acknowledged successfully');
+            } catch (error) {
+                console.error('Error acknowledging alert:', error);
+                showError('Failed to acknowledge alert');
+            }
+        }
+        
+        async function resolveAlert(alertId) {
+            try {
+                await axios.post(`/api/alerts/${alertId}/resolve`);
+                // Refresh the alerts list
+                await loadAlertData();
+                showNotification('Alert resolved successfully');
+            } catch (error) {
+                console.error('Error resolving alert:', error);
+                showError('Failed to resolve alert');
+            }
+        }
+        
+        function showAlertDetails(alertId) {
+            alert(`Alert details for ID: ${alertId}`);
+            // In a real implementation, this would show detailed alert information
+        }
+        
+        function getSeverityIcon(severity) {
+            switch (severity) {
+                case 'Critical': return '🔴';
+                case 'Warning': return '🟡';
+                case 'Info': return '🔵';
+                default: return '⚪';
+            }
+        }
+        
+        function showNotification(message) {
+            // Create a simple notification element
+            const notification = document.createElement('div');
+            notification.className = 'notification success';
+            notification.textContent = message;
+            notification.style.cssText = `
+                position: fixed;
+                top: 20px;
+                right: 20px;
+                background: #28a745;
+                color: white;
+                padding: 10px 15px;
+                border-radius: 4px;
+                z-index: 10000;
+            `;
+            
+            document.body.appendChild(notification);
+            
+            // Remove after 3 seconds
+            setTimeout(() => {
+                document.body.removeChild(notification);
+            }, 3000);
+        }
+        
+        // Override refreshData function for alert-specific loading
+        function refreshData() {
+            loadAlertData();
+            updateTimestamp();
+        }
+        
+        // Apply filters when button is clicked
+        document.getElementById('applyFilters').addEventListener('click', function() {
+            loadAlertData();
+        });
+        
+        // Load data when page loads
+        document.addEventListener('DOMContentLoaded', function() {
+            loadAlertData();
+            // Set up auto-refresh every 30 seconds
+            setInterval(loadAlertData, 30000);
+        });
+    </script>
+</body>
+</html>

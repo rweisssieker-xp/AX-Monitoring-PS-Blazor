@@ -1,0 +1,131 @@
+# ============================================
+# PowerShell Specific
+# ============================================
+
+# PowerShell Transcripts
+PowerShell_transcript.*.txt
+
+# PowerShell Module Build Artifacts
+*.nupkg
+*.nuspec
+
+# Pester Test Results
+testResults.xml
+*.Tests.ps1.xml
+
+# PSScriptAnalyzer Results
+PSScriptAnalyzerSettings.psd1
+
+# PowerShell Gallery API Key
+PSGalleryApiKey.txt
+
+# ============================================
+# IDE and Editor Files
+# ============================================
+
+# VS Code
+.vscode/
+*.code-workspace
+
+# Visual Studio
+.vs/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+# JetBrains IDEs (IntelliJ, Rider, etc.)
+.idea/
+*.iml
+*.ipr
+*.iws
+
+# ============================================
+# Environment and Configuration
+# ============================================
+
+# Environment files with secrets
+.env
+.env.*
+!.env.example
+
+# Configuration files with sensitive data
+config.ini
+secrets.json
+credentials.json
+appsettings.*.json
+!appsettings.json
+
+# ============================================
+# Database Files
+# ============================================
+*.db
+*.sqlite
+*.sqlite3
+*.mdf
+*.ldf
+*.bak
+
+# ============================================
+# Log Files
+# ============================================
+*.log
+logs/
+PowerShell/Logs/*.log
+PowerShell/Logs/*.txt
+
+# ============================================
+# Temporary Files
+# ============================================
+*.tmp
+*.temp
+temp/
+tmp/
+~$*
+
+# ============================================
+# OS Generated Files
+# ============================================
+
+# macOS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+
+# Windows
+ehthumbs.db
+Thumbs.db
+Desktop.ini
+*.lnk
+
+# ============================================
+# Project Specific
+# ============================================
+
+# Data directories
+data/
+cache/
+.cache/
+
+# Build outputs
+build/
+dist/
+out/
+
+# Pode specific
+.pode/
+
+# AI/ML models (if any)
+models/
+*.pkl
+*.h5
+*.model
+
+# Hidden files (with exceptions)
+.*
+!.gitignore
+!.gitkeep
+!.gitattributes
+!.env.example

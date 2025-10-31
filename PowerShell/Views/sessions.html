@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sessions - AX Monitor</title>
+    <link rel="stylesheet" href="/static/css/styles.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+</head>
+<body>
+    <div class="container">
+        <!-- Sidebar Navigation -->
+        <nav class="sidebar">
+            <div class="sidebar-header">
+                <h2>📊 AX Monitor</h2>
+                <div class="env-badge env-{{Environment}}">{{Environment}}</div>
+            </div>
+            <ul class="nav-menu">
+                <li><a href="/"><span class="icon">🏠</span> Dashboard</a></li>
+                <li><a href="/batch"><span class="icon">⚙️</span> Batch Jobs</a></li>
+                <li><a href="/sessions" class="active"><span class="icon">👥</span> Sessions</a></li>
+                <li><a href="/blocking"><span class="icon">🔒</span> Blocking</a></li>
+                <li><a href="/sql-health"><span class="icon">💻</span> SQL Health</a></li>
+                <li><a href="/alerts"><span class="icon">🚨</span> Alerts</a></li>
+                <li><a href="/ai-assistant"><span class="icon">🤖</span> AI Assistant</a></li>
+            </ul>
+            <div class="sidebar-footer">
+                <p>Version {{Version}}</p>
+                <p>Powered by Pode</p>
+            </div>
+        </nav>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <header class="page-header">
+                <h1>Session Monitoring</h1>
+                <div class="header-actions">
+                    <button class="btn btn-secondary" onclick="refreshData()">
+                        <span class="icon">🔄</span> Refresh
+                    </button>
+                    <div class="last-update">Last updated: <span id="lastUpdate">--:--:--</span></div>
+                </div>
+            </header>
+
+            <!-- Session KPI Cards -->
+            <section class="kpi-section">
+                <div class="kpi-grid">
+                    <div class="kpi-card">
+                        <div class="kpi-icon" style="background: #1f77b4;">👥</div>
+                        <div class="kpi-content">
+                            <h3>Active Sessions</h3>
+                            <div class="kpi-value" id="activeSessions">--</div>
+                            <div class="kpi-change" id="activeSessionsChange">--</div>
+                        </div>
+                    </div>
+                    
+                    <div class="kpi-card">
+                        <div class="kpi-icon" style="background: #dc3545;">⏱️</div>
+                        <div class="kpi-content">
+                            <h3>Long Running</h3>
+                            <div class="kpi-value" id="longRunning">--</div>
+                            <div class="kpi-change" id="longRunningChange">--</div>
+                        </div>
+                    </div>
+                    
+                    <div class="kpi-card">
+                        <div class="kpi-icon" style="background: #28a745;">🔒</div>
+                        <div class="kpi-content">
+                            <h3>Blocking Sessions</h3>
+                            <div class="kpi-value" id="blockingSessions">--</div>
+                            <div class="kpi-change" id="blockingSessionsChange">--</div>
+                        </div>
+                    </div>
+                    
+                    <div class="kpi-card">
+                        <div class="kpi-icon" style="background: #ffc107;">💻</div>
+                        <div class="kpi-content">
+                            <h3>AOS Connections</h3>
+                            <div class="kpi-value" id="aosConnections">--</div>
+                            <div class="kpi-change" id="aosConnectionsChange">--</div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Session Table -->
+            <section class="data-section">
+                <h2>Active Sessions</h2>
+                <div class="table-controls">
+                    <div class="filter-group">
+                        <select id="sessionFilter">
+                            <option value="all">All Sessions</option>
+                            <option value="active">Active Only</option>
+                            <option value="idle">Idle Only</option>
+                            <option value="blocking">Blocking Only</option>
+                        </select>
+                        <input type="text" id="sessionSearch" placeholder="Search sessions...">
+                    </div>
+                    <div class="action-buttons">
+                        <button class="btn btn-secondary">Export</button>
+                    </div>
+                </div>
+                
+                <div class="table-container">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>Session ID</th>
+                                <th>User</th>
+                                <th>AOS</th>
+                                <th>Status</th>
+                                <th>Duration</th>
+                                <th>CPU</th>
+                                <th>Memory</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="sessionTableBody">
+                            <tr><td colspan="8" class="loading">Loading sessions...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+
+            <!-- Charts -->
+            <section class="charts-section">
+                <div class="chart-grid">
+                    <div class="chart-card">
+                        <h3>Session Count Trend</h3>
+                        <canvas id="sessionCountChart"></canvas>
+                    </div>
+                    <div class="chart-card">
+                        <h3>Session Duration Distribution</h3>
+                        <canvas id="sessionDurationChart"></canvas>
+                    </div>
+                </div>
+            </section>
+
+        </main>
+    </div>
+
+    <script src="/static/js/dashboard.js"></script>
+    <script>
+        // Specific script for sessions
+        async function loadSessionData() {
+            try {
+                const response = await axios.get('/api/sessions');
+                updateSessionTable(response.data.data);
+                updateSessionKPIs(response.data.data);
+            } catch (error) {
+                console.error('Error loading session data:', error);
+                showError('Failed to load session data');
+            }
+        }
+
+        function updateSessionTable(data) {
+            const tableBody = document.getElementById('sessionTableBody');
+            
+            if (!data || data.length === 0) {
+                tableBody.innerHTML = '<tr><td colspan="8" class="no-data">No active sessions found</td></tr>';
+                return;
+            }
+
+            // Sort by duration (longest first)
+            const sortedData = [...data].sort((a, b) => (b.Duration || 0) - (a.Duration || 0));
+            
+            const rows = sortedData.map(session => {
+                const statusClass = getStatusClass(session.Status);
+                const duration = session.Duration ? formatDuration(session.Duration) : '--';
+                
+                return `
+                    <tr>
+                        <td>${session.SessionId || '--'}</td>
+                        <td>${session.User || '--'}</td>
+                        <td>${session.AOS || '--'}</td>
+                        <td><span class="status-badge ${statusClass}">${session.Status || '--'}</span></td>
+                        <td>${duration}</td>
+                        <td>${session.CPU ? session.CPU.toFixed(1) + '%' : '--'}</td>
+                        <td>${session.Memory ? session.Memory.toFixed(1) + 'MB' : '--'}</td>
+                        <td>
+                            <button class="btn btn-small btn-secondary">Details</button>
+                            <button class="btn btn-small btn-warning">Kill</button>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+            
+            tableBody.innerHTML = rows;
+        }
+        
+        function updateSessionKPIs(data) {
+            if (!data) return;
+            
+            const activeSessions = data.filter(s => s.Status === 'Active').length;
+            const longRunning = data.filter(s => s.Duration > 3600).length; // More than 1 hour
+            const blockingSessions = data.filter(s => s.IsBlocking).length;
+            const aosConnections = [...new Set(data.map(s => s.AOS))].length;
+            
+            document.getElementById('activeSessions').textContent = activeSessions;
+            document.getElementById('longRunning').textContent = longRunning;
+            document.getElementById('blockingSessions').textContent = blockingSessions;
+            document.getElementById('aosConnections').textContent = aosConnections;
+        }
+        
+        function getStatusClass(status) {
+            switch(status?.toLowerCase()) {
+                case 'active': return 'status-active';
+                case 'idle': return 'status-idle';
+                case 'blocking': return 'status-blocking';
+                case 'terminated': return 'status-terminated';
+                default: return 'status-unknown';
+            }
+        }
+        
+        function formatDuration(seconds) {
+            if (seconds < 60) return seconds + 's';
+            if (seconds < 3600) return Math.floor(seconds / 60) + 'm';
+            return Math.floor(seconds / 3600) + 'h ' + Math.floor((seconds % 3600) / 60) + 'm';
+        }
+        
+        // Override refreshData function for session-specific loading
+        function refreshData() {
+            loadSessionData();
+            updateTimestamp();
+        }
+        
+        // Load data when page loads
+        document.addEventListener('DOMContentLoaded', function() {
+            loadSessionData();
+            // Set up auto-refresh every 30 seconds
+            setInterval(loadSessionData, 30000);
+        });
+    </script>
+</body>
+</html>

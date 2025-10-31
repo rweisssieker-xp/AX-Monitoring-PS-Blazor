@@ -1,0 +1,15 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\AX-Monitoring-Blazor.Shared\AX-Monitoring-Blazor.Shared.csproj" />
+    <ProjectReference Include="..\AX-Monitoring-Blazor.Infrastructure\AX-Monitoring-Blazor.Infrastructure.csproj" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <RootNamespace>AX_Monitoring_Blazor.Core</RootNamespace>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+</Project>

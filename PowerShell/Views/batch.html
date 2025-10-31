@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Batch Jobs - AX Monitor</title>
+    <link rel="stylesheet" href="/static/css/styles.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+</head>
+<body>
+    <div class="container">
+        <!-- Sidebar Navigation -->
+        <nav class="sidebar">
+            <div class="sidebar-header">
+                <h2>📊 AX Monitor</h2>
+                <div class="env-badge env-{{Environment}}">{{Environment}}</div>
+            </div>
+            <ul class="nav-menu">
+                <li><a href="/"><span class="icon">🏠</span> Dashboard</a></li>
+                <li><a href="/batch" class="active"><span class="icon">⚙️</span> Batch Jobs</a></li>
+                <li><a href="/sessions"><span class="icon">👥</span> Sessions</a></li>
+                <li><a href="/blocking"><span class="icon">🔒</span> Blocking</a></li>
+                <li><a href="/sql-health"><span class="icon">💻</span> SQL Health</a></li>
+                <li><a href="/alerts"><span class="icon">🚨</span> Alerts</a></li>
+                <li><a href="/ai-assistant"><span class="icon">🤖</span> AI Assistant</a></li>
+            </ul>
+            <div class="sidebar-footer">
+                <p>Version {{Version}}</p>
+                <p>Powered by Pode</p>
+            </div>
+        </nav>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <header class="page-header">
+                <h1>Batch Job Monitoring</h1>
+                <div class="header-actions">
+                    <button class="btn btn-secondary" onclick="refreshData()">
+                        <span class="icon">🔄</span> Refresh
+                    </button>
+                    <div class="last-update">Last updated: <span id="lastUpdate">--:--:--</span></div>
+                </div>
+            </header>
+
+            <!-- Batch KPI Cards -->
+            <section class="kpi-section">
+                <div class="kpi-grid">
+                    <div class="kpi-card">
+                        <div class="kpi-icon" style="background: #1f77b4;">⚙️</div>
+                        <div class="kpi-content">
+                            <h3>Active Jobs</h3>
+                            <div class="kpi-value" id="activeJobs">--</div>
+                            <div class="kpi-change" id="activeJobsChange">--</div>
+                        </div>
+                    </div>
+                    
+                    <div class="kpi-card">
+                        <div class="kpi-icon" style="background: #dc3545;">⚠️</div>
+                        <div class="kpi-content">
+                            <h3>Failed Jobs</h3>
+                            <div class="kpi-value" id="failedJobs">--</div>
+                            <div class="kpi-change" id="failedJobsChange">--</div>
+                        </div>
+                    </div>
+                    
+                    <div class="kpi-card">
+                        <div class="kpi-icon" style="background: #28a745;">⏳</div>
+                        <div class="kpi-content">
+                            <h3>Pending Jobs</h3>
+                            <div class="kpi-value" id="pendingJobs">--</div>
+                            <div class="kpi-change" id="pendingJobsChange">--</div>
+                        </div>
+                    </div>
+                    
+                    <div class="kpi-card">
+                        <div class="kpi-icon" style="background: #ffc107;">📊</div>
+                        <div class="kpi-content">
+                            <h3>Avg. Execution</h3>
+                            <div class="kpi-value" id="avgExecution">-- min</div>
+                            <div class="kpi-change" id="avgExecutionChange">--</div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Batch Job Table -->
+            <section class="data-section">
+                <h2>Active Batch Jobs</h2>
+                <div class="table-container">
+                    <table class="data-table">
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Job Description</th>
+                                <th>Status</th>
+                                <th>Start Time</th>
+                                <th>Duration</th>
+                                <th>Progress</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="batchTableBody">
+                            <tr><td colspan="7" class="loading">Loading batch jobs...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+
+            <!-- Charts -->
+            <section class="charts-section">
+                <div class="chart-grid">
+                    <div class="chart-card">
+                        <h3>Batch Execution Trend</h3>
+                        <canvas id="batchExecutionChart"></canvas>
+                    </div>
+                    <div class="chart-card">
+                        <h3>Error Rate Over Time</h3>
+                        <canvas id="errorRateChart"></canvas>
+                    </div>
+                </div>
+            </section>
+
+        </main>
+    </div>
+
+    <script src="/static/js/dashboard.js"></script>
+    <script>
+        // Specific script for batch jobs
+        async function loadBatchData() {
+            try {
+                const response = await axios.get('/api/batch');
+                updateBatchTable(response.data.data);
+                updateBatchKPIs(response.data.data);
+            } catch (error) {
+                console.error('Error loading batch data:', error);
+                showError('Failed to load batch data');
+            }
+        }
+
+        function updateBatchTable(data) {
+            const tableBody = document.getElementById('batchTableBody');
+            
+            if (!data || data.length === 0) {
+                tableBody.innerHTML = '<tr><td colspan="7" class="no-data">No active batch jobs found</td></tr>';
+                return;
+            }
+
+            // Sort by start time (newest first)
+            const sortedData = [...data].sort((a, b) => new Date(b.StartTime) - new Date(a.StartTime));
+            
+            const rows = sortedData.map(job => {
+                const startTime = new Date(job.StartTime);
+                const duration = job.Duration ? `${job.Duration} min` : '--';
+                const statusClass = getStatusClass(job.Status);
+                
+                return `
+                    <tr>
+                        <td>${job.Id || '--'}</td>
+                        <td>${job.Description || '--'}</td>
+                        <td><span class="status-badge ${statusClass}">${job.Status || '--'}</span></td>
+                        <td>${startTime.toLocaleTimeString()}</td>
+                        <td>${duration}</td>
+                        <td>
+                            <div class="progress-bar">
+                                <div class="progress-fill" style="width: ${job.Progress || 0}%"></div>
+                            </div>
+                            <span>${job.Progress || 0}%</span>
+                        </td>
+                        <td>
+                            <button class="btn btn-small btn-secondary">View</button>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+            
+            tableBody.innerHTML = rows;
+        }
+        
+        function updateBatchKPIs(data) {
+            if (!data) return;
+            
+            const activeJobs = data.filter(job => ['Running', 'Waiting'].includes(job.Status)).length;
+            const failedJobs = data.filter(job => job.Status === 'Failed').length;
+            const pendingJobs = data.filter(job => job.Status === 'Pending').length;
+            
+            // Calculate average execution time
+            const completedJobs = data.filter(job => job.Status === 'Completed' && job.Duration);
+            const avgExecution = completedJobs.length > 0 
+                ? (completedJobs.reduce((sum, job) => sum + job.Duration, 0) / completedJobs.length).toFixed(1)
+                : 0;
+            
+            document.getElementById('activeJobs').textContent = activeJobs;
+            document.getElementById('failedJobs').textContent = failedJobs;
+            document.getElementById('pendingJobs').textContent = pendingJobs;
+            document.getElementById('avgExecution').textContent = avgExecution + ' min';
+        }
+        
+        function getStatusClass(status) {
+            switch(status?.toLowerCase()) {
+                case 'running': return 'status-running';
+                case 'completed': return 'status-completed';
+                case 'failed': return 'status-failed';
+                case 'pending': return 'status-pending';
+                case 'waiting': return 'status-waiting';
+                default: return 'status-unknown';
+            }
+        }
+        
+        // Override refreshData function for batch-specific loading
+        function refreshData() {
+            loadBatchData();
+            updateTimestamp();
+        }
+        
+        // Load data when page loads
+        document.addEventListener('DOMContentLoaded', function() {
+            loadBatchData();
+            // Set up auto-refresh every 30 seconds
+            setInterval(loadBatchData, 30000);
+        });
+    </script>
+</body>
+</html>

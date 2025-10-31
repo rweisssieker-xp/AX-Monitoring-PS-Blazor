@@ -1,0 +1,374 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Assistant - AX Monitor</title>
+    <link rel="stylesheet" href="/static/css/styles.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+</head>
+<body>
+    <div class="container">
+        <!-- Sidebar Navigation -->
+        <nav class="sidebar">
+            <div class="sidebar-header">
+                <h2>📊 AX Monitor</h2>
+                <div class="env-badge env-{{Environment}}">{{Environment}}</div>
+            </div>
+            <ul class="nav-menu">
+                <li><a href="/"><span class="icon">🏠</span> Dashboard</a></li>
+                <li><a href="/batch"><span class="icon">⚙️</span> Batch Jobs</a></li>
+                <li><a href="/sessions"><span class="icon">👥</span> Sessions</a></li>
+                <li><a href="/blocking"><span class="icon">🔒</span> Blocking</a></li>
+                <li><a href="/sql-health"><span class="icon">💻</span> SQL Health</a></li>
+                <li><a href="/alerts"><span class="icon">🚨</span> Alerts</a></li>
+                <li><a href="/ai-assistant" class="active"><span class="icon">🤖</span> AI Assistant</a></li>
+            </ul>
+            <div class="sidebar-footer">
+                <p>Version {{Version}}</p>
+                <p>Powered by Pode</p>
+            </div>
+        </nav>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <header class="page-header">
+                <h1>AI Assistant</h1>
+                <div class="header-actions">
+                    <button class="btn btn-secondary" onclick="loadAIRecommendations()">
+                        <span class="icon">💡</span> Get Recommendations
+                    </button>
+                    <div class="last-update">Last updated: <span id="lastUpdate">--:--:--</span></div>
+                </div>
+            </header>
+
+            <!-- AI KPI Cards -->
+            <section class="kpi-section">
+                <div class="kpi-grid">
+                    <div class="kpi-card">
+                        <div class="kpi-icon" style="background: #1f77b4;">🔍</div>
+                        <div class="kpi-content">
+                            <h3>Anomalies Detected</h3>
+                            <div class="kpi-value" id="anomaliesDetected">--</div>
+                            <div class="kpi-change" id="anomaliesDetectedChange">--</div>
+                        </div>
+                    </div>
+                    
+                    <div class="kpi-card">
+                        <div class="kpi-icon" style="background: #dc3545;">💡</div>
+                        <div class="kpi-content">
+                            <h3>Recommendations</h3>
+                            <div class="kpi-value" id="aiRecommendations">--</div>
+                            <div class="kpi-change" id="aiRecommendationsChange">--</div>
+                        </div>
+                    </div>
+                    
+                    <div class="kpi-card">
+                        <div class="kpi-icon" style="background: #28a745;">🔮</div>
+                        <div class="kpi-content">
+                            <h3>Predictions</h3>
+                            <div class="kpi-value" id="aiPredictions">--</div>
+                            <div class="kpi-change" id="aiPredictionsChange">--</div>
+                        </div>
+                    </div>
+                    
+                    <div class="kpi-card">
+                        <div class="kpi-icon" style="background: #ffc107;">📊</div>
+                        <div class="kpi-content">
+                            <h3>Data Analyzed</h3>
+                            <div class="kpi-value" id="dataAnalyzed">--</div>
+                            <div class="kpi-change" id="dataAnalyzedChange">--</div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Chat Interface -->
+            <section class="chat-section">
+                <h2>Ask the AI Assistant</h2>
+                <div id="chatContainer" class="chat-container">
+                    <div class="chat-messages" id="chatMessages">
+                        <div class="chat-message ai">
+                            <div class="message-avatar">🤖</div>
+                            <div class="message-content">
+                                <div class="message-text">
+                                    Hello! I'm your AX Monitor AI assistant. I can help you understand system performance, troubleshoot issues, analyze metrics, and provide optimization recommendations. What would you like to know?
+                                </div>
+                                <div class="message-time">Just now</div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="chat-input-container">
+                        <textarea 
+                            id="chatInput" 
+                            placeholder="Ask about system performance, metrics, or get recommendations..."
+                            onkeypress="handleKeyPress(event)"
+                        ></textarea>
+                        <button class="btn btn-primary" onclick="sendMessage()">
+                            <span class="icon">💬</span> Send
+                        </button>
+                    </div>
+                </div>
+            </section>
+
+            <!-- AI Recommendations -->
+            <section class="recommendations-section">
+                <h2>AI Recommendations</h2>
+                <div id="recommendationsList" class="recommendations-list">
+                    <div class="loading">Waiting for AI analysis...</div>
+                </div>
+            </section>
+
+            <!-- Anomaly Detection -->
+            <section class="anomalies-section">
+                <h2>Recent Anomalies</h2>
+                <div id="anomaliesList" class="anomalies-list">
+                    <div class="loading">Analyzing for anomalies...</div>
+                </div>
+            </section>
+
+        </main>
+    </div>
+
+    <script src="/static/js/dashboard.js"></script>
+    <script>
+        // Specific script for AI assistant
+        let aiEnabled = true;
+        
+        async function loadAIRecommendations() {
+            try {
+                const response = await axios.get('/api/ai/recommendations');
+                updateRecommendationsList(response.data.data);
+            } catch (error) {
+                console.error('Error loading AI recommendations:', error);
+                showError('Failed to load AI recommendations');
+            }
+        }
+        
+        async function loadAIAnomalies() {
+            try {
+                const response = await axios.get('/api/ai/anomalies');
+                updateAnomaliesList(response.data.data);
+                updateKPIsFromAI(response.data.data);
+            } catch (error) {
+                console.error('Error loading AI anomalies:', error);
+                // Don't show error for anomalies since they might not always be available
+            }
+        }
+        
+        function updateRecommendationsList(recommendations) {
+            const recommendationsList = document.getElementById('recommendationsList');
+            
+            if (!recommendations || recommendations.length === 0) {
+                recommendationsList.innerHTML = '<div class="no-data">No recommendations available at this time</div>';
+                return;
+            }
+
+            const items = recommendations.map(rec => {
+                return `
+                    <div class="recommendation-item">
+                        <div class="recommendation-header">
+                            <span class="recommendation-priority">${getPriorityIcon(rec.Priority)}</span>
+                            <h3>${rec.Title}</h3>
+                        </div>
+                        <p>${rec.Description}</p>
+                        <div class="recommendation-details">
+                            <span class="recommendation-impact">Impact: ${rec.Impact}</span>
+                            <span class="recommendation-confidence">Confidence: ${rec.Confidence}%</span>
+                        </div>
+                        <div class="recommendation-actions">
+                            <button class="btn btn-small btn-primary" onclick="applyRecommendation('${rec.Id}')">Apply</button>
+                            <button class="btn btn-small btn-secondary" onclick="learnMoreRecommendation('${rec.Id}')">Learn More</button>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+            
+            recommendationsList.innerHTML = items;
+        }
+        
+        function updateAnomaliesList(anomalies) {
+            const anomaliesList = document.getElementById('anomaliesList');
+            
+            if (!anomalies || anomalies.length === 0) {
+                anomaliesList.innerHTML = '<div class="no-data">No anomalies detected in the last analysis</div>';
+                return;
+            }
+
+            const items = anomalies.map(anomaly => {
+                return `
+                    <div class="anomaly-item">
+                        <div class="anomaly-header">
+                            <span class="anomaly-severity">${getSeverityIcon(anomaly.Severity)}</span>
+                            <h3>${anomaly.Title}</h3>
+                        </div>
+                        <p>${anomaly.Description}</p>
+                        <div class="anomaly-details">
+                            <span class="anomaly-time">${new Date(anomaly.Timestamp).toLocaleString()}</span>
+                            <span class="anomaly-confidence">Confidence: ${anomaly.Confidence}%</span>
+                        </div>
+                        <div class="anomaly-actions">
+                            <button class="btn btn-small btn-warning" onclick="investigateAnomaly('${anomaly.Id}')">Investigate</button>
+                            <button class="btn btn-small btn-secondary" onclick="viewAnomalyDetails('${anomaly.Id}')">Details</button>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+            
+            anomaliesList.innerHTML = items;
+        }
+        
+        function updateKPIsFromAI(anomalies) {
+            if (!anomalies) return;
+            
+            const anomaliesCount = anomalies.length;
+            const recommendationsCount = anomalies.length > 0 ? anomalies.length : 0;
+            
+            document.getElementById('anomaliesDetected').textContent = anomaliesCount;
+            document.getElementById('aiRecommendations').textContent = recommendationsCount;
+            document.getElementById('aiPredictions').textContent = '2'; // Placeholder
+            document.getElementById('dataAnalyzed').textContent = 'Large'; // Placeholder
+        }
+        
+        async function sendMessage() {
+            const input = document.getElementById('chatInput');
+            const message = input.value.trim();
+            
+            if (!message) return;
+            
+            // Add user message to chat
+            addMessageToChat(message, 'user');
+            input.value = '';
+            
+            try {
+                // Show typing indicator
+                showTypingIndicator();
+                
+                // Send message to AI API
+                const response = await axios.post('/api/ai/chat', {
+                    message: message,
+                    context: 'ax_monitoring'
+                });
+                
+                // Remove typing indicator
+                removeTypingIndicator();
+                
+                // Add AI response to chat
+                addMessageToChat(response.data.response, 'ai');
+            } catch (error) {
+                // Remove typing indicator
+                removeTypingIndicator();
+                
+                console.error('Error sending message to AI:', error);
+                addMessageToChat('Sorry, I encountered an error processing your request. Please try again.', 'ai');
+            }
+        }
+        
+        function addMessageToChat(message, sender) {
+            const chatMessages = document.getElementById('chatMessages');
+            const time = new Date().toLocaleTimeString();
+            
+            const messageElement = document.createElement('div');
+            messageElement.className = `chat-message ${sender}`;
+            
+            messageElement.innerHTML = `
+                <div class="message-avatar">${sender === 'ai' ? '🤖' : '👤'}</div>
+                <div class="message-content">
+                    <div class="message-text">${message}</div>
+                    <div class="message-time">${time}</div>
+                </div>
+            `;
+            
+            chatMessages.appendChild(messageElement);
+            
+            // Scroll to bottom
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
+        
+        function showTypingIndicator() {
+            const chatMessages = document.getElementById('chatMessages');
+            const typingElement = document.createElement('div');
+            typingElement.id = 'typingIndicator';
+            typingElement.className = 'chat-message ai';
+            typingElement.innerHTML = `
+                <div class="message-avatar">🤖</div>
+                <div class="message-content">
+                    <div class="typing-indicator">
+                        <span></span>
+                        <span></span>
+                        <span></span>
+                    </div>
+                </div>
+            `;
+            
+            chatMessages.appendChild(typingElement);
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
+        
+        function removeTypingIndicator() {
+            const typingElement = document.getElementById('typingIndicator');
+            if (typingElement) {
+                typingElement.remove();
+            }
+        }
+        
+        function handleKeyPress(event) {
+            if (event.key === 'Enter' && !event.shiftKey) {
+                event.preventDefault();
+                sendMessage();
+            }
+        }
+        
+        function getPriorityIcon(priority) {
+            switch(priority?.toLowerCase()) {
+                case 'high': return '🔴';
+                case 'medium': return '🟡';
+                case 'low': return '🟢';
+                default: return '⚪';
+            }
+        }
+        
+        function getSeverityIcon(severity) {
+            switch(severity?.toLowerCase()) {
+                case 'critical': return '🔴';
+                case 'high': return '🟠';
+                case 'medium': return '🟡';
+                case 'low': return '🟢';
+                default: return '⚪';
+            }
+        }
+        
+        function applyRecommendation(id) {
+            alert(`Applying recommendation: ${id}`);
+            // In a real implementation, this would apply the recommendation
+        }
+        
+        function learnMoreRecommendation(id) {
+            alert(`Learning more about recommendation: ${id}`);
+            // In a real implementation, this would show detailed information
+        }
+        
+        function investigateAnomaly(id) {
+            alert(`Investigating anomaly: ${id}`);
+            // In a real implementation, this would show investigation details
+        }
+        
+        function viewAnomalyDetails(id) {
+            alert(`Viewing details for anomaly: ${id}`);
+            // In a real implementation, this would show detailed information
+        }
+        
+        // Load AI data when page loads
+        document.addEventListener('DOMContentLoaded', function() {
+            loadAIRecommendations();
+            loadAIAnomalies();
+            
+            // Set up auto-refresh for AI data every 5 minutes
+            setInterval(loadAIRecommendations, 300000);
+            setInterval(loadAIAnomalies, 300000);
+        });
+    </script>
+</body>
+</html>

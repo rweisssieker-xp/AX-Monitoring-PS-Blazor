@@ -1,0 +1,295 @@
+    
+    # ==========================================
+    # FEATURE 2: SLA Compliance Tracking
+    # ==========================================
+    st.subheader("⏱️ SLA Compliance")
+    
+    col1, col2 = st.columns([1, 3])
+    
+    with col1:
+        sla_threshold = st.slider(
+            "SLA Schwellenwert (Minuten)",
+            min_value=5,
+            max_value=60,
+            value=15,
+            step=5,
+            key="sla_threshold"
+        )
+    
+    with col2:
+        sla_metrics = calculate_sla_compliance(df_filtered, sla_threshold)
+        
+        compliance_col1, compliance_col2, compliance_col3, compliance_col4 = st.columns(4)
+        
+        with compliance_col1:
+            st.metric("SLA Compliance", f"{sla_metrics['compliance_rate']:.1f}%")
+        
+        with compliance_col2:
+            st.metric("✅ Innerhalb SLA", sla_metrics['within_sla'])
+        
+        with compliance_col3:
+            st.metric("❌ Über SLA", sla_metrics['over_sla'])
+        
+        with compliance_col4:
+            target_compliance = 90
+            compliance_status = "🟢" if sla_metrics['compliance_rate'] >= target_compliance else "🔴"
+            st.metric("Target", f"{compliance_status} {target_compliance}%")
+        
+        # SLA Compliance Bar
+        if sla_metrics['total_jobs'] > 0:
+            fig_sla = go.Figure()
+            
+            fig_sla.add_trace(go.Bar(
+                x=['SLA Compliance'],
+                y=[sla_metrics['within_sla']],
+                name='Innerhalb SLA',
+                marker_color='#2ca02c',
+                text=[f"{sla_metrics['within_sla']} Jobs"],
+                textposition='inside'
+            ))
+            
+            fig_sla.add_trace(go.Bar(
+                x=['SLA Compliance'],
+                y=[sla_metrics['over_sla']],
+                name='Über SLA',
+                marker_color='#d62728',
+                text=[f"{sla_metrics['over_sla']} Jobs"],
+                textposition='inside'
+            ))
+            
+            fig_sla.update_layout(
+                barmode='stack',
+                height=250,
+                showlegend=True,
+                yaxis_title="Anzahl Jobs",
+                margin=dict(l=20, r=20, t=20, b=20)
+            )
+            
+            st.plotly_chart(fig_sla, use_container_width=True)
+    
+    st.markdown("---")
+    
+    # ==========================================
+    # FEATURE 3: Distribution 0x vs 1x Vergleich
+    # ==========================================
+    st.subheader("🔄 Vergleich: Distribution 0x vs 1x")
+    
+    stats_0x, stats_1x = compare_distribution_groups(df_filtered)
+    
+    if stats_0x and stats_1x:
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            st.markdown("### 🔵 Distribution 0x")
+            metric_col1, metric_col2, metric_col3 = st.columns(3)
+            
+            with metric_col1:
+                st.metric("Jobs", stats_0x['count'])
+            with metric_col2:
+                st.metric("Ø Dauer", f"{stats_0x['avg_duration']:.1f} min")
+            with metric_col3:
+                st.metric("Erfolgsrate", f"{stats_0x['success_rate']:.1f}%")
+            
+            st.caption(f"Median: {stats_0x['median_duration']:.1f} min | Fehler: {stats_0x['errors']}")
+        
+        with col2:
+            st.markdown("### 🟠 Distribution 1x")
+            metric_col1, metric_col2, metric_col3 = st.columns(3)
+            
+            with metric_col1:
+                st.metric("Jobs", stats_1x['count'])
+            with metric_col2:
+                st.metric("Ø Dauer", f"{stats_1x['avg_duration']:.1f} min")
+            with metric_col3:
+                st.metric("Erfolgsrate", f"{stats_1x['success_rate']:.1f}%")
+            
+            st.caption(f"Median: {stats_1x['median_duration']:.1f} min | Fehler: {stats_1x['errors']}")
+        
+        # Comparison bar chart
+        fig_comp = go.Figure()
+        
+        categories = ['Ø Dauer (min)', 'Erfolgsrate (%)', 'Fehleranzahl']
+        
+        fig_comp.add_trace(go.Bar(
+            name='Distribution 0x',
+            x=categories,
+            y=[stats_0x['avg_duration'], stats_0x['success_rate'], stats_0x['errors']],
+            marker_color='#1f77b4'
+        ))
+        
+        fig_comp.add_trace(go.Bar(
+            name='Distribution 1x',
+            x=categories,
+            y=[stats_1x['avg_duration'], stats_1x['success_rate'], stats_1x['errors']],
+            marker_color='#ff7f0e'
+        ))
+        
+        fig_comp.update_layout(
+            barmode='group',
+            height=300,
+            showlegend=True,
+            yaxis_title="Wert",
+            margin=dict(l=20, r=20, t=20, b=20)
+        )
+        
+        st.plotly_chart(fig_comp, use_container_width=True)
+    
+    st.markdown("---")
+    
+    # ==========================================
+    # FEATURE 4: Performance Trend Chart
+    # ==========================================
+    st.subheader("📈 Performance-Trend (Letzte 30 Tage)")
+    
+    trend_chart = create_performance_trend_chart(df_filtered)
+    
+    if trend_chart:
+        st.plotly_chart(trend_chart, use_container_width=True)
+        
+        # Trend insights
+        if 'STARTDATETIME' in df_filtered.columns and 'DURATION_MINUTES' in df_filtered.columns:
+            df_last_7_days = df_filtered[pd.to_datetime(df_filtered['STARTDATETIME']) >= (datetime.now() - timedelta(days=7))]
+            df_prev_7_days = df_filtered[
+                (pd.to_datetime(df_filtered['STARTDATETIME']) >= (datetime.now() - timedelta(days=14))) &
+                (pd.to_datetime(df_filtered['STARTDATETIME']) < (datetime.now() - timedelta(days=7)))
+            ]
+            
+            if not df_last_7_days.empty and not df_prev_7_days.empty:
+                avg_last_7 = df_last_7_days['DURATION_MINUTES'].mean()
+                avg_prev_7 = df_prev_7_days['DURATION_MINUTES'].mean()
+                change_pct = ((avg_last_7 - avg_prev_7) / avg_prev_7 * 100) if avg_prev_7 > 0 else 0
+                
+                trend_col1, trend_col2, trend_col3 = st.columns(3)
+                
+                with trend_col1:
+                    st.metric(
+                        "Letzte 7 Tage",
+                        f"{avg_last_7:.1f} min",
+                        delta=f"{change_pct:+.1f}%" if change_pct != 0 else "Stabil"
+                    )
+                
+                with trend_col2:
+                    st.metric("Vorherige 7 Tage", f"{avg_prev_7:.1f} min")
+                
+                with trend_col3:
+                    trend_status = "📉 Besser" if change_pct < 0 else "📈 Langsamer" if change_pct > 0 else "➡️ Stabil"
+                    st.metric("Trend", trend_status)
+    else:
+        st.info("ℹ️ Nicht genug Daten für Trend-Analyse")
+    
+    st.markdown("---")
+    
+    # ==========================================
+    # FEATURE 5: Anomalie-Erkennung
+    # ==========================================
+    st.subheader("🔥 Anomalie-Erkennung (Laufzeit > 2x Median)")
+    
+    anomalies = detect_anomalies(df_filtered)
+    
+    if not anomalies.empty:
+        st.warning(f"⚠️ {len(anomalies)} anomale Jobs erkannt!")
+        
+        for idx, (_, row) in enumerate(anomalies.head(5).iterrows()):
+            with st.expander(f"🔴 {row['CAPTION']} - {format_datetime(row.get('STARTDATETIME'))}"):
+                col1, col2, col3 = st.columns(3)
+                
+                with col1:
+                    st.metric("Ist-Dauer", f"{row['DURATION_MINUTES']:.1f} min")
+                
+                with col2:
+                    st.metric("Erwartete Dauer", f"{row['EXPECTED_DURATION']:.1f} min")
+                
+                with col3:
+                    st.metric("Abweichung", f"{row['DEVIATION_FACTOR']:.1f}x", delta=f"+{(row['DEVIATION_FACTOR']-1)*100:.0f}%")
+                
+                if pd.notna(row.get('REASON')) and row.get('REASON') != '':
+                    st.error(f"**Grund:** {row['REASON']}")
+    else:
+        st.success("✅ Keine Anomalien erkannt - alle Jobs laufen im normalen Bereich")
+    
+    st.markdown("---")
+    
+    # ==========================================
+    # FEATURE 6: REASON Error Analysis
+    # ==========================================
+    st.subheader("🔍 Fehler & Grund-Analyse (REASON)")
+    
+    error_analysis = analyze_error_reasons(df_filtered)
+    
+    if error_analysis['total_errors'] > 0:
+        # Top Error Reasons
+        st.markdown("### 📊 Top Fehlergründe")
+        
+        if error_analysis['top_reasons']:
+            reasons_df = pd.DataFrame(error_analysis['top_reasons'])
+            
+            fig_reasons = px.bar(
+                reasons_df,
+                x='count',
+                y=[f"{r[:50]}..." if len(r) > 50 else r for r in reasons_df['reason']],
+                orientation='h',
+                text='count',
+                title="Häufigste Fehlergründe",
+                labels={'count': 'Anzahl', 'y': 'Fehlergrund'}
+            )
+            
+            fig_reasons.update_layout(height=400)
+            st.plotly_chart(fig_reasons, use_container_width=True)
+        
+        st.markdown("---")
+        
+        # Smart Error Categorization
+        st.markdown("### 🎯 Fehler-Kategorisierung")
+        
+        cat_col1, cat_col2 = st.columns(2)
+        
+        with cat_col1:
+            for category, reasons in list(error_analysis['categorized'].items())[:3]:
+                if reasons:
+                    with st.expander(f"**{category}** ({len(reasons)} Fehler)", expanded=category in ['Netzwerk/Verbindung', 'Berechtigungen']):
+                        for reason in reasons[:5]:
+                            st.write(f"• {reason[:100]}...")
+        
+        with cat_col2:
+            for category, reasons in list(error_analysis['categorized'].items())[3:]:
+                if reasons:
+                    with st.expander(f"**{category}** ({len(reasons)} Fehler)"):
+                        for reason in reasons[:5]:
+                            st.write(f"• {reason[:100]}...")
+        
+        st.markdown("---")
+        
+        # Aggregated REASON table
+        st.markdown("### 📋 Erweiterte REASON-Tabelle")
+        
+        agg_table = create_reason_aggregated_table(df_filtered)
+        
+        if not agg_table.empty:
+            st.dataframe(
+                agg_table[['Fehlertext', 'Häufigkeit', 'Erste_Auftreten', 'Letzte_Auftreten', 'Betroffene_Jobs']],
+                column_config={
+                    'Fehlertext': st.column_config.TextColumn('Fehlergrund', width="large"),
+                    'Häufigkeit': st.column_config.NumberColumn('Häufigkeit', width="small"),
+                    'Erste_Auftreten': st.column_config.DatetimeColumn('Erstes Auftreten', width="medium"),
+                    'Letzte_Auftreten': st.column_config.DatetimeColumn('Letztes Auftreten', width="medium"),
+                    'Betroffene_Jobs': st.column_config.TextColumn('Betroffene Jobs', width="medium")
+                },
+                use_container_width=True,
+                hide_index=True,
+                height=400
+            )
+            
+            # Download error analysis
+            csv_errors = agg_table.to_csv(index=False, sep=';', encoding='utf-8-sig')
+            st.download_button(
+                label="📥 Fehleranalyse als CSV",
+                data=csv_errors,
+                file_name=f"fehleranalyse_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv",
+                mime="text/csv",
+                key="download_errors_csv"
+            )
+    else:
+        st.success("✅ Keine Fehler im ausgewählten Zeitraum!")
+    
+    st.markdown("---")
+    

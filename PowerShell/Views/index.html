@@ -1,0 +1,157 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{Title}} - AX Monitor</title>
+    <link rel="stylesheet" href="/static/css/styles.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/axios/dist/axios.min.js"></script>
+</head>
+<body>
+    <div class="container">
+        <!-- Sidebar Navigation -->
+        <nav class="sidebar">
+            <div class="sidebar-header">
+                <h2>📊 AX Monitor</h2>
+                <div class="env-badge env-{{Environment}}">{{Environment}}</div>
+            </div>
+            <ul class="nav-menu">
+                <li><a href="/" class="active"><span class="icon">🏠</span> Dashboard</a></li>
+                <li><a href="/batch"><span class="icon">⚙️</span> Batch Jobs</a></li>
+                <li><a href="/sessions"><span class="icon">👥</span> Sessions</a></li>
+                <li><a href="/blocking"><span class="icon">🔒</span> Blocking</a></li>
+                <li><a href="/sql-health"><span class="icon">💻</span> SQL Health</a></li>
+                <li><a href="/alerts"><span class="icon">🚨</span> Alerts</a></li>
+                <li><a href="/ai-assistant"><span class="icon">🤖</span> AI Assistant</a></li>
+                <li class="admin-only" style="display: none;"><a href="/admin"><span class="icon">👤</span> Admin Panel</a></li>
+            </ul>
+            <div class="sidebar-footer">
+                <p>Version {{Version}}</p>
+                <p>Powered by Pode</p>
+            </div>
+        </nav>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <header class="page-header">
+                <h1>System Dashboard</h1>
+                <div class="header-actions">
+                    <div class="user-info" id="user-info-container">
+                        <span id="user-info">--</span> 
+                        <span class="role-badge" id="user-role">--</span>
+                        <button class="btn btn-secondary btn-sm" id="logoutBtn">
+                            <span class="icon">🚪</span> Logout
+                        </button>
+                    </div>
+                    <button class="btn btn-secondary" onclick="refreshData()">
+                        <span class="icon">🔄</span> Refresh
+                    </button>
+                    <div class="last-update">Last updated: <span id="lastUpdate">--:--:--</span></div>
+                </div>
+            </header>
+
+            <!-- KPI Cards -->
+            <section class="kpi-section">
+                <div class="kpi-grid">
+                    <div class="kpi-card">
+                        <div class="kpi-icon" style="background: #1f77b4;">⚙️</div>
+                        <div class="kpi-content">
+                            <h3>Batch Backlog</h3>
+                            <div class="kpi-value" id="batchBacklog">--</div>
+                            <div class="kpi-change" id="batchBacklogChange">--</div>
+                        </div>
+                    </div>
+                    
+                    <div class="kpi-card">
+                        <div class="kpi-icon" style="background: #dc3545;">⚠️</div>
+                        <div class="kpi-content">
+                            <h3>Error Rate</h3>
+                            <div class="kpi-value" id="errorRate">--%</div>
+                            <div class="kpi-change" id="errorRateChange">--</div>
+                        </div>
+                    </div>
+                    
+                    <div class="kpi-card">
+                        <div class="kpi-icon" style="background: #28a745;">👥</div>
+                        <div class="kpi-content">
+                            <h3>Active Sessions</h3>
+                            <div class="kpi-value" id="activeSessions">--</div>
+                            <div class="kpi-change" id="activeSessionsChange">--</div>
+                        </div>
+                    </div>
+                    
+                    <div class="kpi-card">
+                        <div class="kpi-icon" style="background: #ffc107;">🔒</div>
+                        <div class="kpi-content">
+                            <h3>Blocking Chains</h3>
+                            <div class="kpi-value" id="blockingChains">--</div>
+                            <div class="kpi-change" id="blockingChainsChange">--</div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- System Health -->
+            <section class="health-section">
+                <h2>System Health</h2>
+                <div class="health-grid">
+                    <div class="health-card">
+                        <div class="health-icon">💻</div>
+                        <h3>CPU Usage</h3>
+                        <div class="health-value" id="cpuUsage">--%</div>
+                        <div class="health-bar">
+                            <div class="health-bar-fill" id="cpuBar" style="width: 0%;"></div>
+                        </div>
+                    </div>
+                    
+                    <div class="health-card">
+                        <div class="health-icon">🧠</div>
+                        <h3>Memory Usage</h3>
+                        <div class="health-value" id="memoryUsage">--%</div>
+                        <div class="health-bar">
+                            <div class="health-bar-fill" id="memoryBar" style="width: 0%;"></div>
+                        </div>
+                    </div>
+                    
+                    <div class="health-card">
+                        <div class="health-icon">🔗</div>
+                        <h3>Active Connections</h3>
+                        <div class="health-value" id="activeConnections">--</div>
+                    </div>
+                    
+                    <div class="health-card">
+                        <div class="health-icon">⏱️</div>
+                        <h3>Longest Query</h3>
+                        <div class="health-value" id="longestQuery">-- min</div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Charts -->
+            <section class="charts-section">
+                <div class="chart-grid">
+                    <div class="chart-card">
+                        <h3>CPU & Memory Trend</h3>
+                        <canvas id="resourceChart"></canvas>
+                    </div>
+                    <div class="chart-card">
+                        <h3>Batch Job Status</h3>
+                        <canvas id="batchChart"></canvas>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Recent Alerts -->
+            <section class="alerts-section">
+                <h2>Recent Alerts</h2>
+                <div id="alertsList" class="alerts-list">
+                    <div class="loading">Loading alerts...</div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <script src="/static/js/dashboard.js"></script>
+</body>
+</html>

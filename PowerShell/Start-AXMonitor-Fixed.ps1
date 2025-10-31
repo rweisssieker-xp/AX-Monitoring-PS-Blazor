@@ -1,0 +1,368 @@
+<#
+.SYNOPSIS
+    AX 2012 R3 Performance Monitor - Main Entry Point
+.DESCRIPTION
+    Starts the Pode web server for AX monitoring with real-time dashboards,
+    REST API, and background monitoring jobs
+.NOTES
+    Author: AX Monitoring Team
+    Version: 2.0.0
+    Framework: Pode + PowerShell 7+
+#>
+
+[CmdletBinding()]
+param(
+    [Parameter()]
+    [ValidateSet('DEV', 'TST', 'PRD')]
+    [string]$Environment = 'DEV',
+    
+    [Parameter()]
+    [int]$Port = 8080,
+    
+    [Parameter()]
+    [switch]$EnableOpenAI,
+    
+    [Parameter()]
+    [switch]$DebugMode
+)
+
+# Set strict mode for better error handling
+Set-StrictMode -Version Latest
+$ErrorActionPreference = 'Stop'
+
+# Import required modules
+$ModulePath = Join-Path $PSScriptRoot 'Modules'
+Import-Module (Join-Path $ModulePath 'AXMonitor.Config') -Force
+Import-Module (Join-Path $ModulePath 'AXMonitor.Database') -Force
+Import-Module (Join-Path $ModulePath 'AXMonitor.Monitoring') -Force
+Import-Module (Join-Path $ModulePath 'AXMonitor.Alerts') -Force
+Import-Module (Join-Path $ModulePath 'AXMonitor.AI') -Force
+
+# Check if Pode is installed
+if (-not (Get-Module -ListAvailable -Name Pode)) {
+    Write-Host "❌ Pode module not found. Installing..." -ForegroundColor Yellow
+    Install-Module -Name Pode -Scope CurrentUser -Force
+}
+
+Import-Module Pode -Force
+
+Write-Host @"
+╔═══════════════════════════════════════════════════════════╗
+║   AX 2012 R3 Performance Monitor - PowerShell Edition    ║
+║   Powered by Pode Web Framework                          ║
+╚═══════════════════════════════════════════════════════════╝
+"@ -ForegroundColor Cyan
+
+# Load configuration
+Write-Host "🔧 Loading configuration for environment: $Environment" -ForegroundColor Green
+$Config = Initialize-AXMonitorConfig -Environment $Environment
+
+# Validate database connectivity
+Write-Host "🔌 Testing database connections..." -ForegroundColor Green
+$DbTest = Test-AXDatabaseConnection -Config $Config
+if (-not $DbTest.Success) {
+    Write-Host "❌ Database connection failed: $($DbTest.Error)" -ForegroundColor Red
+    exit 1
+}
+Write-Host "✅ Database connection successful" -ForegroundColor Green
+
+# Display startup message
+Write-Host "`n✅ Starting AX Monitor Server..." -ForegroundColor Green
+Write-Host "🌐 Dashboard will be available at: http://localhost:$Port" -ForegroundColor Cyan
+Write-Host "🔧 Environment: $Environment" -ForegroundColor Cyan
+if ($EnableOpenAI.IsPresent) {
+    Write-Host "🤖 AI Features: ENABLED" -ForegroundColor Magenta
+}
+Write-Host "`nPress Ctrl+C to stop the server...`n" -ForegroundColor Yellow
+
+# Start Pode server
+Start-PodeServer {
+    
+    # Add endpoints
+    Add-PodeEndpoint -Address localhost -Port $Port -Protocol Http
+    
+    # Enable logging
+    New-PodeLoggingMethod -Terminal | Enable-PodeErrorLogging
+    New-PodeLoggingMethod -Terminal | Enable-PodeRequestLogging
+    
+    # Set view engine for HTML templates
+    Set-PodeViewEngine -Type HTML -Extension HTML -ScriptBlock {
+        param($path, $data)
+        $content = Get-Content -Path $path -Raw
+        foreach ($key in $data.Keys) {
+            $content = $content -replace "{{$key}}", $data[$key]
+        }
+        return $content
+    }
+    
+    # Enable sessions
+    Enable-PodeSessionMiddleware -Duration 3600 -Extend
+    
+    # Add static content route
+    Add-PodeStaticRoute -Path '/static' -Source (Join-Path $PSScriptRoot 'Public')
+    
+    # Store config in server state
+    $PodeContext.Server.Data['Config'] = $Config
+    $PodeContext.Server.Data['EnableOpenAI'] = $EnableOpenAI.IsPresent
+    
+    # ============================================
+    # Web UI Routes
+    # ============================================
+    
+    # Home page
+    Add-PodeRoute -Method Get -Path '/' -ScriptBlock {
+        Write-PodeViewResponse -Path 'index.html' -Data @{
+            Title = 'AX Monitor Dashboard'
+            Environment = $PodeContext.Server.Data['Config'].Environment
+            Version = '2.0.0'
+        }
+    }
+    
+    # Dashboard page - redirecting to home since index.html serves the dashboard
+    Add-PodeRoute -Method Get -Path '/dashboard' -ScriptBlock {
+        Write-PodeRedirectResponse -Path '/'
+    }
+    
+    # Batch monitoring page
+    Add-PodeRoute -Method Get -Path '/batch' -ScriptBlock {
+        Write-PodeViewResponse -Path 'batch.html'
+    }
+    
+    # Sessions page
+    Add-PodeRoute -Method Get -Path '/sessions' -ScriptBlock {
+        Write-PodeViewResponse -Path 'sessions.html'
+    }
+    
+    # Blocking analysis page
+    Add-PodeRoute -Method Get -Path '/blocking' -ScriptBlock {
+        Write-PodeViewResponse -Path 'blocking.html'
+    }
+    
+    # SQL Health page
+    Add-PodeRoute -Method Get -Path '/sql-health' -ScriptBlock {
+        Write-PodeViewResponse -Path 'sql-health.html'
+    }
+    
+    # Alerts page
+    Add-PodeRoute -Method Get -Path '/alerts' -ScriptBlock {
+        Write-PodeViewResponse -Path 'alerts.html'
+    }
+    
+    # AI Assistant page (if enabled)
+    if ($PodeContext.Server.Data['EnableOpenAI']) {
+        Add-PodeRoute -Method Get -Path '/ai-assistant' -ScriptBlock {
+            Write-PodeViewResponse -Path 'ai-assistant.html'
+        }
+    }
+    
+    # ============================================
+    # REST API Routes
+    # ============================================
+    
+    # API: Get KPI summary
+    Add-PodeRoute -Method Get -Path '/api/kpi' -ScriptBlock {
+        $Config = $PodeContext.Server.Data['Config']
+        try {
+            $KpiData = Get-AXKPIData -Config $Config
+            Write-PodeJsonResponse -Value $KpiData
+        }
+        catch {
+            Write-PodeJsonResponse -Value @{
+                error = $_.Exception.Message
+            } -StatusCode 500
+        }
+    }
+    
+    # API: Get batch jobs
+    Add-PodeRoute -Method Get -Path '/api/batch' -ScriptBlock {
+        $Config = $PodeContext.Server.Data['Config']
+        try {
+            $BatchJobs = Get-AXBatchJobs -Config $Config
+            Write-PodeJsonResponse -Value @{ data = $BatchJobs }
+        }
+        catch {
+            Write-PodeJsonResponse -Value @{
+                error = $_.Exception.Message
+            } -StatusCode 500
+        }
+    }
+    
+    # API: Get sessions
+    Add-PodeRoute -Method Get -Path '/api/sessions' -ScriptBlock {
+        $Config = $PodeContext.Server.Data['Config']
+        try {
+            $Sessions = Get-AXSessions -Config $Config
+            Write-PodeJsonResponse -Value @{ data = $Sessions }
+        }
+        catch {
+            Write-PodeJsonResponse -Value @{
+                error = $_.Exception.Message
+            } -StatusCode 500
+        }
+    }
+    
+    # API: Get blocking chains
+    Add-PodeRoute -Method Get -Path '/api/blocking' -ScriptBlock {
+        $Config = $PodeContext.Server.Data['Config']
+        try {
+            $Blocking = Get-AXBlockingChains -Config $Config
+            Write-PodeJsonResponse -Value @{ data = $Blocking }
+        }
+        catch {
+            Write-PodeJsonResponse -Value @{
+                error = $_.Exception.Message
+            } -StatusCode 500
+        }
+    }
+    
+    # API: Get SQL health metrics
+    Add-PodeRoute -Method Get -Path '/api/sql-health' -ScriptBlock {
+        $Config = $PodeContext.Server.Data['Config']
+        try {
+            $Health = Get-SQLHealthMetrics -Config $Config
+            Write-PodeJsonResponse -Value $Health
+        }
+        catch {
+            Write-PodeJsonResponse -Value @{
+                error = $_.Exception.Message
+            } -StatusCode 500
+        }
+    }
+    
+    # API: Get alerts
+    Add-PodeRoute -Method Get -Path '/api/alerts' -ScriptBlock {
+        $Config = $PodeContext.Server.Data['Config']
+        try {
+            $Alerts = Get-AXAlerts -Config $Config
+            Write-PodeJsonResponse -Value @{ data = $Alerts }
+        }
+        catch {
+            Write-PodeJsonResponse -Value @{
+                error = $_.Exception.Message
+            } -StatusCode 500
+        }
+    }
+    
+    # API: Acknowledge alert
+    Add-PodeRoute -Method Post -Path '/api/alerts/:id/acknowledge' -ScriptBlock {
+        $Config = $PodeContext.Server.Data['Config']
+        $AlertId = $WebEvent.Parameters['id']
+        try {
+            Set-AXAlertAcknowledged -Config $Config -AlertId $AlertId
+            Write-PodeJsonResponse -Value @{ success = $true }
+        }
+        catch {
+            Write-PodeJsonResponse -Value @{
+                error = $_.Exception.Message
+            } -StatusCode 500
+        }
+    }
+    
+    # API: AI Chat (if enabled)
+    if ($PodeContext.Server.Data['EnableOpenAI']) {
+        Add-PodeRoute -Method Post -Path '/api/ai/chat' -ScriptBlock {
+            $Config = $PodeContext.Server.Data['Config']
+            $Body = $WebEvent.Data
+            try {
+                $Response = Invoke-AXAIChat -Config $Config -Message $Body.message -Context $Body.context
+                Write-PodeJsonResponse -Value @{ response = $Response }
+            }
+            catch {
+                Write-PodeJsonResponse -Value @{
+                    error = $_.Exception.Message
+                } -StatusCode 500
+            }
+        }
+        
+        # API: AI Anomaly Detection
+        Add-PodeRoute -Method Get -Path '/api/ai/anomalies' -ScriptBlock {
+            $Config = $PodeContext.Server.Data['Config']
+            try {
+                $Anomalies = Get-AXAIAnomalies -Config $Config
+                Write-PodeJsonResponse -Value @{ data = $Anomalies }
+            }
+            catch {
+                Write-PodeJsonResponse -Value @{
+                    error = $_.Exception.Message
+                } -StatusCode 500
+            }
+        }
+        
+        # API: AI Recommendations
+        Add-PodeRoute -Method Get -Path '/api/ai/recommendations' -ScriptBlock {
+            $Config = $PodeContext.Server.Data['Config']
+            try {
+                $Recommendations = Get-AXAIRecommendations -Config $Config
+                Write-PodeJsonResponse -Value @{ data = $Recommendations }
+            }
+            catch {
+                Write-PodeJsonResponse -Value @{
+                    error = $_.Exception.Message
+                } -StatusCode 500
+            }
+        }
+    }
+    
+    # API: Health check
+    Add-PodeRoute -Method Get -Path '/api/health' -ScriptBlock {
+        Write-PodeJsonResponse -Value @{
+            status = 'healthy'
+            timestamp = Get-Date -Format 'o'
+            version = '2.0.0'
+        }
+    }
+    
+    # ============================================
+    # Background Schedules
+    # ============================================
+    
+    # Schedule: Collect metrics every 1 minute
+    Add-PodeSchedule -Name 'CollectMetrics' -Cron '@minutely' -ScriptBlock {
+        $Config = $PodeContext.Server.Data['Config']
+        try {
+            Write-Host "[$(Get-Date -Format 'HH:mm:ss')] 📊 Collecting metrics..." -ForegroundColor Cyan
+            Invoke-AXMetricsCollection -Config $Config
+        }
+        catch {
+            Write-Host "[$(Get-Date -Format 'HH:mm:ss')] ❌ Metrics collection failed: $($_.Exception.Message)" -ForegroundColor Red
+        }
+    }
+    
+    # Schedule: Check alerts every 2 minutes
+    Add-PodeSchedule -Name 'CheckAlerts' -Cron '*/2 * * * *' -ScriptBlock {
+        $Config = $PodeContext.Server.Data['Config']
+        try {
+            Write-Host "[$(Get-Date -Format 'HH:mm:ss')] 🚨 Checking alerts..." -ForegroundColor Yellow
+            Invoke-AXAlertCheck -Config $Config
+        }
+        catch {
+            Write-Host "[$(Get-Date -Format 'HH:mm:ss')] ❌ Alert check failed: $($_.Exception.Message)" -ForegroundColor Red
+        }
+    }
+    
+    # Schedule: Cleanup old data every hour
+    Add-PodeSchedule -Name 'CleanupData' -Cron '@hourly' -ScriptBlock {
+        $Config = $PodeContext.Server.Data['Config']
+        try {
+            Write-Host "[$(Get-Date -Format 'HH:mm:ss')] 🧹 Cleaning up old data..." -ForegroundColor Gray
+            Invoke-AXDataCleanup -Config $Config
+        }
+        catch {
+            Write-Host "[$(Get-Date -Format 'HH:mm:ss')] ❌ Cleanup failed: $($_.Exception.Message)" -ForegroundColor Red
+        }
+    }
+    
+    # Schedule: AI Analysis every 5 minutes (if enabled)
+    if ($PodeContext.Server.Data['EnableOpenAI']) {
+        Add-PodeSchedule -Name 'AIAnalysis' -Cron '*/5 * * * *' -ScriptBlock {
+            $Config = $PodeContext.Server.Data['Config']
+            try {
+                Write-Host "[$(Get-Date -Format 'HH:mm:ss')] 🤖 Running AI analysis..." -ForegroundColor Magenta
+                Invoke-AXAIAnalysis -Config $Config
+            }
+            catch {
+                Write-Host "[$(Get-Date -Format 'HH:mm:ss')] ❌ AI analysis failed: $($_.Exception.Message)" -ForegroundColor Red
+            }
+        }
+    }
+}
