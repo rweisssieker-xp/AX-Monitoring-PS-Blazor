@@ -21,7 +21,11 @@ window.chartHelper = {
                 datasets: (data.datasets || []).map(dataset => ({
                     label: dataset.label || '',
                     data: dataset.data || [],
-                    backgroundColor: dataset.backgroundColor || 'rgba(54, 162, 235, 0.2)',
+                    backgroundColor: Array.isArray(dataset.backgroundColor) 
+                        ? dataset.backgroundColor 
+                        : (typeof dataset.backgroundColor === 'string' && dataset.backgroundColor.includes(',')
+                            ? dataset.backgroundColor.split(',').map(c => c.trim())
+                            : dataset.backgroundColor || 'rgba(54, 162, 235, 0.2)'),
                     borderColor: dataset.borderColor || 'rgba(54, 162, 235, 1)',
                     borderWidth: dataset.borderWidth || 1
                 }))
@@ -58,7 +62,11 @@ window.chartHelper = {
         chartInstance.data.datasets = (data.datasets || []).map(dataset => ({
             label: dataset.label || '',
             data: dataset.data || [],
-            backgroundColor: dataset.backgroundColor || 'rgba(54, 162, 235, 0.2)',
+            backgroundColor: Array.isArray(dataset.backgroundColor) 
+                ? dataset.backgroundColor 
+                : (typeof dataset.backgroundColor === 'string' && dataset.backgroundColor.includes(',')
+                    ? dataset.backgroundColor.split(',').map(c => c.trim())
+                    : dataset.backgroundColor || 'rgba(54, 162, 235, 0.2)'),
             borderColor: dataset.borderColor || 'rgba(54, 162, 235, 1)',
             borderWidth: dataset.borderWidth || 1
         }));

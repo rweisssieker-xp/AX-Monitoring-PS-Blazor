@@ -40,9 +40,11 @@ builder.Services.AddScoped<IApiService, ApiService>();
 builder.Services.AddScoped<IMetricsService, MetricsService>();
 builder.Services.AddScoped<IPredictionsService, PredictionsService>();
 builder.Services.AddScoped<IBatchJobService, BatchJobService>();
+builder.Services.AddScoped<IBatchJobHistoryService, BatchJobHistoryService>();
 builder.Services.AddScoped<ISessionService, SessionService>();
 builder.Services.AddScoped<IAlertService, AlertService>();
 builder.Services.AddScoped<IBlockingService, BlockingService>();
+builder.Services.AddScoped<IDeadlockService, DeadlockService>();
 // SignalR service must be Singleton to match HubConnection lifecycle
 builder.Services.AddSingleton<ISignalRService, SignalRService>();
 

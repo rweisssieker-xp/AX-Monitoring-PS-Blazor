@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
 using AXMonitoringBU.Api.Services;
+using AXMonitoringBU.Api.Models;
 
 namespace AXMonitoringBU.Api.Controllers;
 
@@ -8,11 +9,16 @@ namespace AXMonitoringBU.Api.Controllers;
 public class SessionsController : ControllerBase
 {
     private readonly ISessionService _sessionService;
+    private readonly IExportService _exportService;
     private readonly ILogger<SessionsController> _logger;
 
-    public SessionsController(ISessionService sessionService, ILogger<SessionsController> logger)
+    public SessionsController(
+        ISessionService sessionService, 
+        IExportService exportService,
+        ILogger<SessionsController> logger)
     {
         _sessionService = sessionService;
+        _exportService = exportService;
         _logger = logger;
     }
 
@@ -71,6 +77,40 @@ public class SessionsController : ControllerBase
         {
             _logger.LogError(ex, "Error killing session {SessionId}", id);
             return StatusCode(500, new { error = "Failed to kill session" });
+        }
+    }
+
+    [HttpGet("export/csv")]
+    public async Task<IActionResult> ExportSessionsToCsv([FromQuery] string? status = null)
+    {
+        try
+        {
+            var sessions = await _sessionService.GetSessionsAsync(status);
+            var csvBytes = await _exportService.ExportSessionsToCsvAsync(sessions);
+            var filename = $"sessions_{DateTime.UtcNow:yyyyMMdd_HHmmss}.csv";
+            return File(csvBytes, "text/csv", filename);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error exporting sessions to CSV");
+            return StatusCode(500, new { error = "Failed to export sessions" });
+        }
+    }
+
+    [HttpGet("export/excel")]
+    public async Task<IActionResult> ExportSessionsToExcel([FromQuery] string? status = null)
+    {
+        try
+        {
+            var sessions = await _sessionService.GetSessionsAsync(status);
+            var excelBytes = await _exportService.ExportSessionsToExcelAsync(sessions);
+            var filename = $"sessions_{DateTime.UtcNow:yyyyMMdd_HHmmss}.xlsx";
+            return File(excelBytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", filename);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error exporting sessions to Excel");
+            return StatusCode(500, new { error = "Failed to export sessions" });
         }
     }
 }

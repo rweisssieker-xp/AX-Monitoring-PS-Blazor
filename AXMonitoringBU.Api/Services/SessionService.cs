@@ -14,11 +14,16 @@ public interface ISessionService
 public class SessionService : ISessionService
 {
     private readonly AXDbContext _context;
+    private readonly IAXDatabaseService _axDatabaseService;
     private readonly ILogger<SessionService> _logger;
 
-    public SessionService(AXDbContext context, ILogger<SessionService> logger)
+    public SessionService(
+        AXDbContext context, 
+        IAXDatabaseService axDatabaseService,
+        ILogger<SessionService> logger)
     {
         _context = context;
+        _axDatabaseService = axDatabaseService;
         _logger = logger;
     }
 
@@ -26,16 +31,11 @@ public class SessionService : ISessionService
     {
         try
         {
-            var query = _context.Sessions.AsQueryable();
-
-            if (!string.IsNullOrEmpty(status))
-            {
-                query = query.Where(s => s.Status == status);
-            }
-
-            return await query
-                .OrderByDescending(s => s.LoginTime)
-                .ToListAsync();
+            // Read directly from AX database
+            var axSessions = await _axDatabaseService.GetSessionsFromAXAsync(status);
+            
+            // Return AX data
+            return axSessions;
         }
         catch (Exception ex)
         {
@@ -48,7 +48,16 @@ public class SessionService : ISessionService
     {
         try
         {
-            return await _context.Sessions.FindAsync(id);
+            // Try to find in local database first
+            var localSession = await _context.Sessions.FindAsync(id);
+            if (localSession != null)
+            {
+                return localSession;
+            }
+
+            // If not found, get from AX database
+            var axSessions = await _axDatabaseService.GetSessionsFromAXAsync();
+            return axSessions.FirstOrDefault(s => s.SessionId == id.ToString());
         }
         catch (Exception ex)
         {
@@ -61,18 +70,37 @@ public class SessionService : ISessionService
     {
         try
         {
-            var session = await _context.Sessions.FindAsync(id);
+            // First try to get the session
+            var session = await GetSessionByIdAsync(id);
             if (session == null)
             {
+                _logger.LogWarning("Session {SessionId} not found", id);
                 return false;
             }
 
-            // TODO: Implement actual kill logic (call AX API)
-            session.Status = "Terminated";
-            session.UpdatedAt = DateTime.UtcNow;
+            // Try to kill in AX database if SessionId is available
+            if (!string.IsNullOrEmpty(session.SessionId))
+            {
+                var axKilled = await _axDatabaseService.KillSessionInAXAsync(session.SessionId);
+                if (axKilled)
+                {
+                    _logger.LogInformation("Session {SessionId} killed in AX database", id);
+                    return true;
+                }
+            }
 
-            await _context.SaveChangesAsync();
-            return true;
+            // Fallback: Update local monitoring database
+            var localSession = await _context.Sessions.FindAsync(id);
+            if (localSession != null)
+            {
+                localSession.Status = "Terminated";
+                localSession.UpdatedAt = DateTime.UtcNow;
+                await _context.SaveChangesAsync();
+                _logger.LogInformation("Session {SessionId} status updated in local database", id);
+                return true;
+            }
+
+            return false;
         }
         catch (Exception ex)
         {

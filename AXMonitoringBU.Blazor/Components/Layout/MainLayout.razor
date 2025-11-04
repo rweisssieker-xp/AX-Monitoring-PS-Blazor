@@ -1,5 +1,7 @@
 ﻿@inherits LayoutComponentBase
 @using Microsoft.Extensions.Configuration
+@using AXMonitoringBU.Blazor.Services
+@inject IApiService ApiService
 
 <div class="page">
     <div class="sidebar">
@@ -11,6 +13,18 @@
             <div class="d-flex align-items-center justify-content-between w-100">
                 <h4>AX Monitoring BU</h4>
                 <div class="d-flex align-items-center gap-3">
+                    @if (!string.IsNullOrEmpty(databaseInfo?.display_name))
+                    {
+                        <span class="badge bg-secondary" title="Überwachte Datenbank">
+                            🖥️ @databaseInfo.display_name
+                        </span>
+                    }
+                    @if (databaseInfo?.aos_servers != null && databaseInfo.aos_servers.Any())
+                    {
+                        <span class="badge bg-primary" title="AOS Server: @string.Join(", ", databaseInfo.aos_servers)">
+                            🖥️ AOS: @string.Join(", ", databaseInfo.aos_servers)
+                        </span>
+                    }
                     <span class="badge bg-info">@Environment</span>
                     <small class="text-muted">Last updated: @DateTime.Now.ToString("HH:mm:ss")</small>
                 </div>
@@ -26,7 +40,36 @@
 @code {
     [Inject] private IConfiguration Configuration { get; set; } = null!;
     
+    private DatabaseInfoResponse? databaseInfo;
+    
     private string Environment => Configuration["App:Environment"] ?? 
                                   Configuration["ASPNETCORE_ENVIRONMENT"] ?? 
                                   "DEV";
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadDatabaseInfo();
+    }
+
+    private async Task LoadDatabaseInfo()
+    {
+        try
+        {
+            databaseInfo = await ApiService.GetAsync<DatabaseInfoResponse>("api/v1/database/info");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading database info: {ex.Message}");
+        }
+    }
+
+    public class DatabaseInfoResponse
+    {
+        public string server { get; set; } = string.Empty;
+        public string database { get; set; } = string.Empty;
+        public string provider { get; set; } = string.Empty;
+        public string display_name { get; set; } = string.Empty;
+        public List<string>? aos_servers { get; set; }
+        public string? default_aos { get; set; }
+    }
 }

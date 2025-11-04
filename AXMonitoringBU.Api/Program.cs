@@ -23,23 +23,24 @@ builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
-// Configure Entity Framework
-var connectionString = builder.Configuration.GetConnectionString("DefaultConnection")
-    ?? (builder.Configuration["Database:Server"] != null
-        ? $"Server={builder.Configuration["Database:Server"]};Database={builder.Configuration["Database:Name"]};User Id={builder.Configuration["Database:User"]};Password={builder.Configuration["Database:Password"]};TrustServerCertificate=true;Connection Timeout={builder.Configuration["Database:ConnectionTimeout"] ?? "30"};Command Timeout={builder.Configuration["Database:CommandTimeout"] ?? "60"}"
-        : "Server=localhost;Database=AXMonitoringBU;Trusted_Connection=true;TrustServerCertificate=true");
+// Add HttpContextAccessor for UserService
+builder.Services.AddHttpContextAccessor();
 
-var dbProvider = builder.Configuration["Database:Provider"] ?? "SqlServer";
+// Configure Entity Framework for Monitoring Database (local SQLite for history)
+// The AX Database connection is handled separately by AXDatabaseService
+var monitoringDbConnectionString = builder.Configuration["MonitoringDatabase:ConnectionString"] 
+    ?? "Data Source=axmonitoring.db";
+var monitoringDbProvider = builder.Configuration["MonitoringDatabase:Provider"] ?? "Sqlite";
 
 builder.Services.AddDbContext<AXDbContext>(options =>
 {
-    if (dbProvider.Equals("Sqlite", StringComparison.OrdinalIgnoreCase))
+    if (monitoringDbProvider.Equals("Sqlite", StringComparison.OrdinalIgnoreCase))
     {
-        options.UseSqlite(connectionString);
+        options.UseSqlite(monitoringDbConnectionString);
     }
     else
     {
-        options.UseSqlServer(connectionString);
+        options.UseSqlServer(monitoringDbConnectionString);
     }
 });
 
@@ -82,6 +83,8 @@ builder.Services.AddCors(options =>
 });
 
 // Register services
+builder.Services.AddScoped<IUserService, UserService>();
+builder.Services.AddScoped<IAXDatabaseService, AXDatabaseService>();
 builder.Services.AddScoped<IKpiDataService, KpiDataService>();
 builder.Services.AddScoped<IBatchJobService, BatchJobService>();
 builder.Services.AddScoped<ISessionService, SessionService>();
@@ -93,12 +96,52 @@ builder.Services.AddScoped<IPdfReportService, PdfReportService>();
 builder.Services.AddScoped<IBusinessKpiService, BusinessKpiService>();
 builder.Services.AddScoped<IRemediationService, RemediationService>();
 builder.Services.AddScoped<ITicketingService, TicketingService>();
+builder.Services.AddScoped<IBaselineService, BaselineService>();
+builder.Services.AddScoped<IMaintenanceWindowService, MaintenanceWindowService>();
+builder.Services.AddScoped<IDeadlockService, DeadlockService>();
+builder.Services.AddScoped<IExportService, ExportService>();
+    builder.Services.AddScoped<IBatchJobHistoryAnalysisService, BatchJobHistoryAnalysisService>();
+
+// Configure OpenAI Service
+var analysisEnabled = builder.Configuration["OpenAI:AnalysisEnabled"] != "false";
+if (analysisEnabled)
+{
+    builder.Services.AddHttpClient();
+    builder.Services.AddSingleton<IOpenAIService>(sp =>
+    {
+        var httpClientFactory = sp.GetRequiredService<IHttpClientFactory>();
+        var httpClient = httpClientFactory.CreateClient();
+        var configuration = sp.GetRequiredService<IConfiguration>();
+        var logger = sp.GetRequiredService<ILogger<OpenAIService>>();
+        return new OpenAIService(httpClient, configuration, logger);
+    });
+}
+else
+{
+    // Dummy service if disabled
+    builder.Services.AddSingleton<IOpenAIService, DummyOpenAIService>();
+}
+
+// Background Service for analysis (must be singleton)
+builder.Services.AddSingleton<IBackgroundAnalysisService>(sp =>
+{
+    var openAIService = sp.GetRequiredService<IOpenAIService>();
+    var logger = sp.GetRequiredService<ILogger<BackgroundAnalysisService>>();
+    return new BackgroundAnalysisService(openAIService, logger);
+});
 
 // Register Background Service for SignalR updates
 builder.Services.AddHostedService<MonitoringUpdateService>();
 
 // Add HttpClient for Teams notifications
 builder.Services.AddHttpClient();
+
+// Add Health Checks
+builder.Services.AddHealthChecks()
+    .AddCheck<DatabaseHealthCheck>("database")
+    .AddCheck<EmailHealthCheck>("email")
+    .AddCheck<TeamsHealthCheck>("teams")
+    .AddCheck<TicketingHealthCheck>("ticketing");
 
 var app = builder.Build();
 
@@ -141,8 +184,19 @@ app.MapControllers();
 // Map SignalR Hub
 app.MapHub<AXMonitoringBU.Api.Hubs.MonitoringHub>("/monitoringHub");
 
-// Health check endpoint
-app.MapGet("/health", () => new
+// Health check endpoints
+app.MapHealthChecks("/health");
+app.MapHealthChecks("/health/ready", new Microsoft.AspNetCore.Diagnostics.HealthChecks.HealthCheckOptions
+{
+    Predicate = check => check.Tags.Contains("ready")
+});
+app.MapHealthChecks("/health/live", new Microsoft.AspNetCore.Diagnostics.HealthChecks.HealthCheckOptions
+{
+    Predicate = _ => false
+});
+
+// Legacy health endpoint for backward compatibility
+app.MapGet("/health/simple", () => new
 {
     Status = "healthy",
     Timestamp = DateTime.UtcNow,

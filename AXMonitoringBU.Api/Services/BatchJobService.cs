@@ -14,11 +14,16 @@ public interface IBatchJobService
 public class BatchJobService : IBatchJobService
 {
     private readonly AXDbContext _context;
+    private readonly IAXDatabaseService _axDatabaseService;
     private readonly ILogger<BatchJobService> _logger;
 
-    public BatchJobService(AXDbContext context, ILogger<BatchJobService> logger)
+    public BatchJobService(
+        AXDbContext context, 
+        IAXDatabaseService axDatabaseService,
+        ILogger<BatchJobService> logger)
     {
         _context = context;
+        _axDatabaseService = axDatabaseService;
         _logger = logger;
     }
 
@@ -26,16 +31,12 @@ public class BatchJobService : IBatchJobService
     {
         try
         {
-            var query = _context.BatchJobs.AsQueryable();
-
-            if (!string.IsNullOrEmpty(status))
-            {
-                query = query.Where(b => b.Status == status);
-            }
-
-            return await query
-                .OrderByDescending(b => b.StartTime ?? b.CreatedAt)
-                .ToListAsync();
+            // Read directly from AX database
+            var axBatchJobs = await _axDatabaseService.GetBatchJobsFromAXAsync(status);
+            
+            // Optionally sync to local monitoring database for history
+            // For now, just return the AX data
+            return axBatchJobs;
         }
         catch (Exception ex)
         {
@@ -48,7 +49,16 @@ public class BatchJobService : IBatchJobService
     {
         try
         {
-            return await _context.BatchJobs.FindAsync(id);
+            // Try to find in local database first
+            var localBatchJob = await _context.BatchJobs.FindAsync(id);
+            if (localBatchJob != null)
+            {
+                return localBatchJob;
+            }
+
+            // If not found, get from AX database
+            var axBatchJobs = await _axDatabaseService.GetBatchJobsFromAXAsync();
+            return axBatchJobs.FirstOrDefault(b => b.BatchJobId == id.ToString());
         }
         catch (Exception ex)
         {
@@ -61,19 +71,38 @@ public class BatchJobService : IBatchJobService
     {
         try
         {
-            var batchJob = await _context.BatchJobs.FindAsync(id);
+            // First try to get the batch job
+            var batchJob = await GetBatchJobByIdAsync(id);
             if (batchJob == null)
             {
+                _logger.LogWarning("Batch job {BatchJobId} not found", id);
                 return false;
             }
 
-            // TODO: Implement actual restart logic (call AX API)
-            batchJob.Status = "Waiting";
-            batchJob.Progress = 0;
-            batchJob.UpdatedAt = DateTime.UtcNow;
+            // Try to restart in AX database if BatchJobId (RECID) is available
+            if (!string.IsNullOrEmpty(batchJob.BatchJobId))
+            {
+                var axRestarted = await _axDatabaseService.RestartBatchJobInAXAsync(batchJob.BatchJobId);
+                if (axRestarted)
+                {
+                    _logger.LogInformation("Batch job {BatchJobId} restarted in AX database", id);
+                    return true;
+                }
+            }
 
-            await _context.SaveChangesAsync();
-            return true;
+            // Fallback: Update local monitoring database
+            var localBatchJob = await _context.BatchJobs.FindAsync(id);
+            if (localBatchJob != null)
+            {
+                localBatchJob.Status = "Waiting";
+                localBatchJob.Progress = 0;
+                localBatchJob.UpdatedAt = DateTime.UtcNow;
+                await _context.SaveChangesAsync();
+                _logger.LogInformation("Batch job {BatchJobId} status updated in local database", id);
+                return true;
+            }
+
+            return false;
         }
         catch (Exception ex)
         {

@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Mvc;
 using AXMonitoringBU.Api.Services;
+using AXMonitoringBU.Api.Models;
 
 namespace AXMonitoringBU.Api.Controllers;
 
@@ -8,11 +9,16 @@ namespace AXMonitoringBU.Api.Controllers;
 public class BatchJobsController : ControllerBase
 {
     private readonly IBatchJobService _batchJobService;
+    private readonly IExportService _exportService;
     private readonly ILogger<BatchJobsController> _logger;
 
-    public BatchJobsController(IBatchJobService batchJobService, ILogger<BatchJobsController> logger)
+    public BatchJobsController(
+        IBatchJobService batchJobService, 
+        IExportService exportService,
+        ILogger<BatchJobsController> logger)
     {
         _batchJobService = batchJobService;
+        _exportService = exportService;
         _logger = logger;
     }
 
@@ -71,6 +77,40 @@ public class BatchJobsController : ControllerBase
         {
             _logger.LogError(ex, "Error restarting batch job {BatchJobId}", id);
             return StatusCode(500, new { error = "Failed to restart batch job" });
+        }
+    }
+
+    [HttpGet("export/csv")]
+    public async Task<IActionResult> ExportBatchJobsToCsv([FromQuery] string? status = null)
+    {
+        try
+        {
+            var batchJobs = await _batchJobService.GetBatchJobsAsync(status);
+            var csvBytes = await _exportService.ExportBatchJobsToCsvAsync(batchJobs);
+            var filename = $"batch_jobs_{DateTime.UtcNow:yyyyMMdd_HHmmss}.csv";
+            return File(csvBytes, "text/csv", filename);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error exporting batch jobs to CSV");
+            return StatusCode(500, new { error = "Failed to export batch jobs" });
+        }
+    }
+
+    [HttpGet("export/excel")]
+    public async Task<IActionResult> ExportBatchJobsToExcel([FromQuery] string? status = null)
+    {
+        try
+        {
+            var batchJobs = await _batchJobService.GetBatchJobsAsync(status);
+            var excelBytes = await _exportService.ExportBatchJobsToExcelAsync(batchJobs);
+            var filename = $"batch_jobs_{DateTime.UtcNow:yyyyMMdd_HHmmss}.xlsx";
+            return File(excelBytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", filename);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error exporting batch jobs to Excel");
+            return StatusCode(500, new { error = "Failed to export batch jobs" });
         }
     }
 }

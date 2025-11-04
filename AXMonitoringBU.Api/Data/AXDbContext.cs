@@ -16,6 +16,9 @@ public class AXDbContext : DbContext
     public DbSet<SqlHealth> SqlHealthRecords { get; set; }
     public DbSet<RemediationRuleEntity> RemediationRules { get; set; }
     public DbSet<RemediationExecutionEntity> RemediationExecutions { get; set; }
+    public DbSet<Baseline> Baselines { get; set; }
+    public DbSet<MaintenanceWindow> MaintenanceWindows { get; set; }
+    public DbSet<BatchJobHistoryAnalysis> BatchJobHistoryAnalyses { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -101,6 +104,49 @@ public class AXDbContext : DbContext
             // TriggerData, ActionsExecuted, and ResultData are TEXT by default in SQLite
             entity.HasIndex(e => e.RuleId);
             entity.HasIndex(e => e.StartTime);
+        });
+
+        // Configure Baseline
+        modelBuilder.Entity<Baseline>(entity =>
+        {
+            entity.ToTable("Baselines");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.MetricName).HasMaxLength(255).IsRequired();
+            entity.Property(e => e.MetricType).HasMaxLength(100).IsRequired();
+            entity.Property(e => e.MetricClass).HasMaxLength(255);
+            entity.Property(e => e.Environment).HasMaxLength(50).IsRequired();
+            entity.HasIndex(e => new { e.MetricName, e.MetricType, e.MetricClass, e.Environment });
+            entity.HasIndex(e => e.BaselineDate);
+        });
+
+        // Configure MaintenanceWindow
+        modelBuilder.Entity<MaintenanceWindow>(entity =>
+        {
+            entity.ToTable("MaintenanceWindows");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Name).HasMaxLength(255).IsRequired();
+            entity.Property(e => e.Description).HasMaxLength(1000);
+            entity.Property(e => e.RecurrencePattern).HasMaxLength(50);
+            entity.Property(e => e.DayOfWeek).HasMaxLength(20);
+            entity.Property(e => e.Environment).HasMaxLength(50);
+            entity.HasIndex(e => e.Enabled);
+            entity.HasIndex(e => e.StartTime);
+            entity.HasIndex(e => e.EndTime);
+        });
+
+        // Configure BatchJobHistoryAnalysis
+        modelBuilder.Entity<BatchJobHistoryAnalysis>(entity =>
+        {
+            entity.ToTable("BatchJobHistoryAnalyses");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Caption).HasMaxLength(500).IsRequired();
+            entity.Property(e => e.ErrorReason).HasMaxLength(2000).IsRequired();
+            entity.Property(e => e.ErrorCategory).HasMaxLength(100);
+            entity.Property(e => e.ErrorSeverity).HasMaxLength(50);
+            entity.Property(e => e.ErrorAnalysis).HasMaxLength(4000);
+            entity.Property(e => e.ErrorSuggestions).HasMaxLength(4000);
+            entity.HasIndex(e => new { e.Caption, e.CreatedDateTime });
+            entity.HasIndex(e => e.AnalyzedAt);
         });
     }
 }

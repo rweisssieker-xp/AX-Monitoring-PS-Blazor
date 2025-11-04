@@ -18,8 +18,11 @@ public class AlertService : IAlertService
 {
     private readonly AXDbContext _context;
     private readonly ILogger<AlertService> _logger;
+    private readonly IUserService? _userService;
     private readonly IEmailAlertService? _emailService;
     private readonly ITeamsNotificationService? _teamsService;
+    private readonly IBaselineService? _baselineService;
+    private readonly IMaintenanceWindowService? _maintenanceWindowService;
 
     public AlertService(
         AXDbContext context, 
@@ -28,8 +31,11 @@ public class AlertService : IAlertService
     {
         _context = context;
         _logger = logger;
+        _userService = serviceProvider.GetService<IUserService>();
         _emailService = serviceProvider.GetService<IEmailAlertService>();
         _teamsService = serviceProvider.GetService<ITeamsNotificationService>();
+        _baselineService = serviceProvider.GetService<IBaselineService>();
+        _maintenanceWindowService = serviceProvider.GetService<IMaintenanceWindowService>();
     }
 
     public async Task<IEnumerable<Alert>> GetAlertsAsync(string? status = null)
@@ -87,6 +93,15 @@ public class AlertService : IAlertService
     {
         try
         {
+            // Check if we're in a maintenance window
+            if (_maintenanceWindowService != null && await _maintenanceWindowService.IsInMaintenanceWindowAsync())
+            {
+                var activeWindows = await _maintenanceWindowService.GetActiveMaintenanceWindowsAsync();
+                _logger.LogInformation("Skipping alert creation during maintenance window(s): {Windows}", 
+                    string.Join(", ", activeWindows.Select(w => w.Name)));
+                throw new InvalidOperationException($"Alert creation suppressed during maintenance window: {string.Join(", ", activeWindows.Select(w => w.Name))}");
+            }
+
             var alert = new Alert
             {
                 AlertId = $"ALERT_{DateTime.UtcNow:yyyyMMdd_HHmmss}",
@@ -96,31 +111,41 @@ public class AlertService : IAlertService
                 Status = "Active",
                 Timestamp = DateTime.UtcNow,
                 CreatedAt = DateTime.UtcNow,
-                CreatedBy = createdBy ?? "System"
+                CreatedBy = createdBy ?? (_userService?.GetCurrentWindowsUser() ?? "System")
             };
 
             _context.Alerts.Add(alert);
             await _context.SaveChangesAsync();
 
-            // Send notifications asynchronously
-            _ = Task.Run(async () =>
+            // Send notifications asynchronously (only if not suppressed)
+            var suppressNotifications = _maintenanceWindowService != null && 
+                await _maintenanceWindowService.IsInMaintenanceWindowAsync();
+
+            if (!suppressNotifications)
             {
-                try
+                _ = Task.Run(async () =>
                 {
-                    if (_emailService != null)
+                    try
                     {
-                        await _emailService.SendAlertAsync(alert);
+                        if (_emailService != null)
+                        {
+                            await _emailService.SendAlertAsync(alert);
+                        }
+                        if (_teamsService != null)
+                        {
+                            await _teamsService.SendAlertAsync(alert);
+                        }
                     }
-                    if (_teamsService != null)
+                    catch (Exception ex)
                     {
-                        await _teamsService.SendAlertAsync(alert);
+                        _logger.LogError(ex, "Error sending notifications for alert {AlertId}", alert.AlertId);
                     }
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogError(ex, "Error sending notifications for alert {AlertId}", alert.AlertId);
-                }
-            });
+                });
+            }
+            else
+            {
+                _logger.LogInformation("Notifications suppressed for alert {AlertId} during maintenance window", alert.AlertId);
+            }
 
             return alert;
         }
@@ -176,6 +201,49 @@ public class AlertService : IAlertService
         {
             _logger.LogError(ex, "Error deleting alert {AlertId}", id);
             throw;
+        }
+    }
+
+    public async Task<Alert?> CheckBaselineAndCreateAlertAsync(string metricName, string metricType, double currentValue, double thresholdPercent = 30.0, string? metricClass = null, string environment = "DEV")
+    {
+        try
+        {
+            if (_baselineService == null)
+            {
+                _logger.LogWarning("BaselineService not available, skipping baseline check");
+                return null;
+            }
+
+            var isAboveBaseline = await _baselineService.IsMetricAboveBaselineAsync(
+                metricName, metricType, currentValue, thresholdPercent, metricClass, environment);
+
+            if (isAboveBaseline)
+            {
+                var baseline = await _baselineService.GetBaselineAsync(metricName, metricType, metricClass, environment);
+                var threshold = baseline?.Percentile95 * (1 + thresholdPercent / 100.0) ?? currentValue;
+
+                var message = $"Metric {metricName} ({metricType}) exceeds baseline threshold: " +
+                    $"Current: {currentValue:F2}, Threshold: {threshold:F2} " +
+                    $"(P95={baseline?.Percentile95:F2} + {thresholdPercent}%)";
+
+                if (!string.IsNullOrEmpty(metricClass))
+                {
+                    message += $", Class: {metricClass}";
+                }
+
+                return await CreateAlertAsync(
+                    metricType,
+                    "Warning",
+                    message,
+                    "Baseline Monitor");
+            }
+
+            return null;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error checking baseline and creating alert for {MetricName}/{MetricType}", metricName, metricType);
+            return null;
         }
     }
 }

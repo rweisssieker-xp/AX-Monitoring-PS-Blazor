@@ -1,0 +1,729 @@
+@page "/batch-job-history"
+@using AXMonitoringBU.Blazor.Services
+@using AXMonitoringBU.Blazor.Components
+@inject IBatchJobHistoryService BatchJobHistoryService
+@implements IAsyncDisposable
+
+<PageTitle>Batch Job History - AX Monitoring BU</PageTitle>
+
+<h3>📋 Batch Job History</h3>
+
+<!-- Error Statistics Cards -->
+<div class="row mb-4">
+    <div class="col-md-3">
+        <MetricCard Title="Total Jobs" Value="@(errorStatistics?.TotalJobs.ToString() ?? "0")" Color="#3498db" />
+    </div>
+    <div class="col-md-3">
+        <MetricCard Title="Total Errors" Value="@(errorStatistics?.TotalErrors.ToString() ?? "0")" Color="#e74c3c" />
+    </div>
+    <div class="col-md-3">
+        <MetricCard Title="Success Rate" Value="@($"{errorStatistics?.SuccessRate:F1 ?? 0.0}%")" Color="#2ecc71" />
+    </div>
+    <div class="col-md-3">
+        <MetricCard Title="Error Rate" Value="@($"{errorStatistics?.ErrorRate:F1 ?? 0.0}%")" Color="#f39c12" />
+    </div>
+</div>
+
+<!-- Error Charts -->
+@if (errorTrends != null && errorTrends.Any())
+{
+    <div class="row mb-4">
+        <div class="col-md-8">
+            <div class="card">
+                <div class="card-header">
+                    <h5>Error Trends Over Time</h5>
+                </div>
+                <div class="card-body">
+                    @if (errorTrendsChartData != null)
+                    {
+                        <ChartComponent ChartId="errorTrendsChart" ChartType="line" Data="@errorTrendsChartData" Options="@errorTrendsChartOptions" />
+                    }
+                    else
+                    {
+                        <p class="text-muted">No trend data available</p>
+                    }
+                </div>
+            </div>
+        </div>
+        <div class="col-md-4">
+            <div class="card">
+                <div class="card-header">
+                    <h5>Top Error Categories</h5>
+                </div>
+                <div class="card-body">
+                    @if (errorCategoriesChartData != null && errorStatistics?.TopCategories != null && errorStatistics.TopCategories.Any())
+                    {
+                        <ChartComponent ChartId="errorCategoriesChart" ChartType="pie" Data="@errorCategoriesChartData" Options="@errorCategoriesChartOptions" />
+                    }
+                    else
+                    {
+                        <p class="text-muted">No category data available</p>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+}
+else if (errorStatistics != null)
+{
+    <div class="alert alert-info mb-4">
+        <strong>Info:</strong> No error trends available for the selected period. Try adjusting the date filter or wait for more data.
+    </div>
+}
+
+<!-- Filters -->
+<div class="mb-4">
+    <div class="card">
+        <div class="card-body">
+            <div class="row">
+                <div class="col-md-4">
+                    <label for="captionPattern" class="form-label">Caption Pattern:</label>
+                    <input type="text" class="form-control" id="captionPattern" @bind="captionPattern" 
+                           placeholder="e.g., Auftragsfreige Distribution 0%" />
+                    <small class="form-text text-muted">Use % as wildcard</small>
+                </div>
+                <div class="col-md-3">
+                    <label for="createdFrom" class="form-label">Created From:</label>
+                    <input type="date" class="form-control" id="createdFrom" @bind="createdFrom" />
+                </div>
+                <div class="col-md-2">
+                    <label for="filterErrors" class="form-label">Filter:</label>
+                    <select class="form-select" id="filterErrors" @bind="errorFilter" @bind:after="OnFilterChanged">
+                        <option value="all">All</option>
+                        <option value="errors">Errors Only</option>
+                        <option value="success">Success Only</option>
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <label for="categoryFilter" class="form-label">Category:</label>
+                    <select class="form-select" id="categoryFilter" @bind="categoryFilter" @bind:after="OnFilterChanged">
+                        <option value="">All Categories</option>
+                        @foreach (var category in availableCategories)
+                        {
+                            <option value="@category">@category</option>
+                        }
+                    </select>
+                </div>
+                <div class="col-md-1 d-flex align-items-end">
+                    @if (filteredHistory.Any(h => h.IsError && string.IsNullOrEmpty(h.ErrorCategory)))
+                    {
+                        <button class="btn btn-warning" @onclick="BulkAnalyzeErrors" disabled="@isBulkAnalyzing">
+                            @if (isBulkAnalyzing)
+                            {
+                                <span class="spinner-border spinner-border-sm"></span>
+                            }
+                            else
+                            {
+                                <span>🤖 Bulk Analyze</span>
+                            }
+                        </button>
+                    }
+                </div>
+                <div class="col-md-2 d-flex align-items-end">
+                    <button class="btn btn-primary me-2" @onclick="LoadData">🔍 Search</button>
+                    <button class="btn btn-secondary me-2" @onclick="ResetFilters">🔄 Reset</button>
+                    <button class="btn btn-info" @onclick="RefreshStatistics">📊 Refresh Stats</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@if (isLoading)
+{
+    <div class="text-center">
+        <div class="spinner-border" role="status">
+            <span class="visually-hidden">Loading...</span>
+        </div>
+    </div>
+}
+else if (history != null && history.Any())
+{
+    <div class="table-responsive">
+        <table class="table table-striped table-hover">
+            <thead>
+                <tr>
+                    <th>Caption</th>
+                    <th>Start DateTime</th>
+                    <th>End DateTime</th>
+                    <th>Duration</th>
+                    <th>Reason</th>
+                    <th>Error Category</th>
+                    <th>Severity</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var item in filteredHistory)
+                {
+                    var duration = item.StartDateTime.HasValue && item.EndDateTime.HasValue
+                        ? (item.EndDateTime.Value - item.StartDateTime.Value).ToString(@"hh\:mm\:ss")
+                        : "N/A";
+                    
+                    var severityBadgeClass = item.ErrorSeverity?.ToLower() switch
+                    {
+                        "critical" => "bg-danger",
+                        "warning" => "bg-warning",
+                        _ => "bg-info"
+                    };
+
+                    var errorBadgeClass = item.IsError ? "bg-danger" : "bg-success";
+                    
+                    <tr class="@(item.IsError ? "table-danger" : "")">
+                        <td><strong>@item.Caption</strong></td>
+                        <td>@(item.StartDateTime?.ToString("yyyy-MM-dd HH:mm:ss") ?? "N/A")</td>
+                        <td>@(item.EndDateTime?.ToString("yyyy-MM-dd HH:mm:ss") ?? "N/A")</td>
+                        <td><span class="badge bg-info">@duration</span></td>
+                        <td>
+                            @if (item.IsError)
+                            {
+                                <span class="badge @errorBadgeClass">@(item.Reason ?? "Error")</span>
+                            }
+                            else
+                            {
+                                <span class="text-muted">@(item.Reason ?? "-")</span>
+                            }
+                        </td>
+                        <td>
+                            @if (!string.IsNullOrEmpty(item.ErrorCategory))
+                            {
+                                <span class="badge bg-secondary">@item.ErrorCategory</span>
+                            }
+                            else if (item.IsError)
+                            {
+                                <span class="text-muted">Not analyzed</span>
+                            }
+                        </td>
+                        <td>
+                            @if (!string.IsNullOrEmpty(item.ErrorSeverity))
+                            {
+                                <span class="badge @severityBadgeClass">@item.ErrorSeverity</span>
+                            }
+                        </td>
+                        <td>
+                            @if (item.IsError)
+                            {
+                                <button class="btn btn-sm btn-primary" @onclick="() => AnalyzeError(item)" disabled="@isAnalyzing">
+                                    @if (isAnalyzing && analyzingItem == item.Caption)
+                                    {
+                                        <span class="spinner-border spinner-border-sm"></span>
+                                    }
+                                    else
+                                    {
+                                        <span>🤖 Analyze</span>
+                                    }
+                                </button>
+                                <button class="btn btn-sm btn-info ms-1" @onclick="() => ViewDetails(item)">📋 Details</button>
+                            }
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+
+    <!-- Paging Controls -->
+    @if (pageResponse != null && pageResponse.totalPages > 1)
+    {
+        <div class="d-flex justify-content-between align-items-center mt-3">
+            <div>
+                <label for="pageSize" class="form-label me-2">Page Size:</label>
+                <select class="form-select d-inline-block" style="width: auto;" id="pageSize" @bind="pageSize" @bind:after="OnPageSizeChanged">
+                    <option value="10">10</option>
+                    <option value="25">25</option>
+                    <option value="50">50</option>
+                    <option value="100">100</option>
+                </select>
+            </div>
+            <div>
+                <small class="text-muted">
+                    Showing @(((pageResponse.page ?? 1) - 1) * (pageResponse.pageSize ?? 50) + 1) - @Math.Min((pageResponse.page ?? 1) * (pageResponse.pageSize ?? 50), pageResponse.totalCount ?? 0) 
+                    of @(pageResponse.totalCount ?? 0) entries
+                </small>
+            </div>
+            <nav>
+                <ul class="pagination mb-0">
+                    <li class="page-item @((pageResponse.page ?? 1) == 1 ? "disabled" : "")">
+                        <a class="page-link" href="#" @onclick="() => ChangePage((pageResponse.page ?? 1) - 1)" @onclick:preventDefault>Previous</a>
+                    </li>
+                    @for (int i = Math.Max(1, (pageResponse.page ?? 1) - 2); i <= Math.Min(pageResponse.totalPages ?? 1, (pageResponse.page ?? 1) + 2); i++)
+                    {
+                        var pageNum = i;
+                        <li class="page-item @(pageNum == (pageResponse.page ?? 1) ? "active" : "")">
+                            <a class="page-link" href="#" @onclick="() => ChangePage(pageNum)" @onclick:preventDefault>@pageNum</a>
+                        </li>
+                    }
+                    <li class="page-item @((pageResponse.page ?? 1) >= (pageResponse.totalPages ?? 1) ? "disabled" : "")">
+                        <a class="page-link" href="#" @onclick="() => ChangePage((pageResponse.page ?? 1) + 1)" @onclick:preventDefault>Next</a>
+                    </li>
+                </ul>
+            </nav>
+        </div>
+    }
+}
+else if (history != null && !history.Any())
+{
+    <div class="alert alert-info">
+        <strong>No Data Found:</strong> No batch job history found for the specified criteria.
+        @if (!string.IsNullOrEmpty(errorMessage))
+        {
+            <br /><small class="text-muted">Error: @errorMessage</small>
+        }
+    </div>
+}
+else if (errorMessage != null)
+{
+    <div class="alert alert-danger">
+        <strong>Error:</strong> @errorMessage
+        <br /><small class="text-muted">Please check the database connection and try again.</small>
+    </div>
+}
+else
+{
+    <div class="alert alert-warning">
+        <strong>Loading:</strong> Data is being loaded. Please wait...
+    </div>
+}
+
+<!-- Error Details Modal -->
+@if (showDetailsModal && selectedItem != null)
+{
+    <div class="modal show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.5);">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Batch Job Details - @selectedItem.Caption</h5>
+                    <button type="button" class="btn-close" @onclick="CloseDetailsModal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row mb-3">
+                        <div class="col-md-6">
+                            <strong>Start DateTime:</strong> @(selectedItem.StartDateTime?.ToString("yyyy-MM-dd HH:mm:ss") ?? "N/A")
+                        </div>
+                        <div class="col-md-6">
+                            <strong>End DateTime:</strong> @(selectedItem.EndDateTime?.ToString("yyyy-MM-dd HH:mm:ss") ?? "N/A")
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <strong>Reason:</strong>
+                        <div class="alert @(selectedItem.IsError ? "alert-danger" : "alert-success")">
+                            @(selectedItem.Reason ?? "-")
+                        </div>
+                    </div>
+                    
+                    @if (selectedItem.IsError && selectedErrorAnalysis != null)
+                    {
+                        <div class="mb-3">
+                            <h6>AI Analysis:</h6>
+                            <div class="card">
+                                <div class="card-body">
+                                    <p><strong>Category:</strong> <span class="badge bg-secondary">@selectedErrorAnalysis.Category</span></p>
+                                    <p><strong>Severity:</strong> <span class="badge bg-@(selectedErrorAnalysis.Severity.ToLower() == "critical" ? "danger" : selectedErrorAnalysis.Severity.ToLower() == "warning" ? "warning" : "info")">@selectedErrorAnalysis.Severity</span></p>
+                                    <p><strong>Explanation:</strong></p>
+                                    <p>@selectedErrorAnalysis.Explanation</p>
+                                    <p><strong>Suggestions:</strong></p>
+                                    <div>@((MarkupString)selectedErrorAnalysis.Suggestions.Replace("\n", "<br/>"))</div>
+                                </div>
+                            </div>
+                        </div>
+                    }
+                    else if (selectedItem.IsError)
+                    {
+                        <div class="alert alert-warning">
+                            This error has not been analyzed yet. Click "Analyze" to get AI-powered insights.
+                        </div>
+                    }
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" @onclick="CloseDetailsModal">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private bool isLoading = false;
+    private List<BatchJobHistoryDto>? history;
+    private BatchJobHistoryResponse? pageResponse;
+    private string? captionPattern;
+    private DateTime? createdFrom;
+    private string? errorMessage;
+    private string errorFilter = "all";
+    private string? categoryFilter;
+    private bool isBulkAnalyzing = false;
+    private int currentPage = 1;
+    private int pageSize = 50;
+    private bool isAnalyzing = false;
+    private string? analyzingItem;
+    private BatchJobHistoryDto? selectedItem;
+    private bool showDetailsModal = false;
+    private ErrorAnalysisDto? selectedErrorAnalysis;
+    private ErrorStatisticsDto? errorStatistics;
+    private System.Threading.Timer? refreshTimer;
+    private List<ErrorTrendDto>? errorTrends;
+    private ChartData? errorTrendsChartData;
+    private ChartData? errorCategoriesChartData;
+    private ChartOptions? errorTrendsChartOptions;
+    private ChartOptions? errorCategoriesChartOptions;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadData();
+        await LoadStatistics();
+        await LoadErrorTrends();
+        
+        // Refresh statistics every 30 seconds
+        refreshTimer = new System.Threading.Timer(async _ => await RefreshStatistics(), null, TimeSpan.FromSeconds(30), TimeSpan.FromSeconds(30));
+    }
+
+    private List<BatchJobHistoryDto> filteredHistory
+    {
+        get
+        {
+            if (history == null) return new List<BatchJobHistoryDto>();
+            
+            var filtered = errorFilter switch
+            {
+                "errors" => history.Where(h => h.IsError).ToList(),
+                "success" => history.Where(h => !h.IsError).ToList(),
+                _ => history
+            };
+
+            if (!string.IsNullOrEmpty(categoryFilter))
+            {
+                filtered = filtered.Where(h => h.ErrorCategory == categoryFilter).ToList();
+            }
+
+            return filtered;
+        }
+    }
+
+    private List<string> availableCategories
+    {
+        get
+        {
+            if (history == null) return new List<string>();
+            return history
+                .Where(h => !string.IsNullOrEmpty(h.ErrorCategory))
+                .Select(h => h.ErrorCategory!)
+                .Distinct()
+                .OrderBy(c => c)
+                .ToList();
+        }
+    }
+
+    private async Task LoadData()
+    {
+        isLoading = true;
+        errorMessage = null;
+        
+        try
+        {
+            pageResponse = await BatchJobHistoryService.GetBatchJobHistoryAsync(captionPattern, createdFrom, currentPage, pageSize);
+            history = pageResponse?.history;
+            
+            if (pageResponse?.error != null)
+            {
+                errorMessage = pageResponse.error;
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = ex.Message;
+            history = null;
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task LoadStatistics()
+    {
+        try
+        {
+            var summary = await BatchJobHistoryService.GetErrorSummaryAsync(createdFrom);
+            errorStatistics = summary?.statistics;
+            
+            // Always initialize statistics with default values if null
+            if (errorStatistics == null)
+            {
+                errorStatistics = new ErrorStatisticsDto
+                {
+                    TotalJobs = 0,
+                    TotalErrors = 0,
+                    SuccessRate = 0.0,
+                    ErrorRate = 0.0,
+                    TopCategories = new List<CategoryCountDto>(),
+                    SeverityCounts = new Dictionary<string, int>(),
+                    PeriodFrom = createdFrom ?? DateTime.UtcNow.AddDays(-30),
+                    PeriodTo = DateTime.UtcNow
+                };
+            }
+            
+            // Update charts if statistics are available
+            if (errorStatistics != null && errorStatistics.TopCategories != null && errorStatistics.TopCategories.Any())
+            {
+                UpdateErrorCategoriesChart();
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading statistics: {ex.Message}");
+            // Initialize with default values on error
+            errorStatistics = new ErrorStatisticsDto
+            {
+                TotalJobs = 0,
+                TotalErrors = 0,
+                SuccessRate = 0.0,
+                ErrorRate = 0.0,
+                TopCategories = new List<CategoryCountDto>(),
+                SeverityCounts = new Dictionary<string, int>(),
+                PeriodFrom = createdFrom ?? DateTime.UtcNow.AddDays(-30),
+                PeriodTo = DateTime.UtcNow
+            };
+        }
+    }
+
+    private async Task LoadErrorTrends()
+    {
+        try
+        {
+            var trendsResponse = await BatchJobHistoryService.GetErrorTrendsAsync(createdFrom);
+            errorTrends = trendsResponse?.trends;
+            
+            if (errorTrends != null && errorTrends.Any())
+            {
+                UpdateErrorTrendsChart();
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading error trends: {ex.Message}");
+        }
+    }
+
+    private void UpdateErrorTrendsChart()
+    {
+        if (errorTrends == null || !errorTrends.Any()) return;
+
+        errorTrendsChartData = new ChartData
+        {
+            Labels = errorTrends.Select(t => t.Date.ToString("yyyy-MM-dd")).ToList(),
+            Datasets = new List<ChartDataset>
+            {
+                new ChartDataset
+                {
+                    Label = "Error Count",
+                    Data = errorTrends.Select(t => (double)t.ErrorCount).ToList(),
+                    BackgroundColor = "rgba(231, 76, 60, 0.2)",
+                    BorderColor = "rgba(231, 76, 60, 1)",
+                    BorderWidth = 2
+                }
+            }
+        };
+
+        errorTrendsChartOptions = new ChartOptions
+        {
+            Responsive = true,
+            Plugins = new ChartPlugins
+            {
+                Title = new ChartTitle
+                {
+                    Display = true,
+                    Text = "Error Trends Over Time"
+                },
+                Legend = new ChartLegend
+                {
+                    Display = true,
+                    Position = "top"
+                }
+            },
+            Scales = new ChartScales
+            {
+                Y = new ChartAxis
+                {
+                    BeginAtZero = true
+                }
+            }
+        };
+    }
+
+    private void UpdateErrorCategoriesChart()
+    {
+        if (errorStatistics?.TopCategories == null || !errorStatistics.TopCategories.Any()) return;
+
+        var colors = new[] { "#e74c3c", "#f39c12", "#3498db", "#2ecc71", "#9b59b6", "#1abc9c", "#34495e", "#e67e22", "#95a5a6", "#d35400" };
+        
+        errorCategoriesChartData = new ChartData
+        {
+            Labels = errorStatistics.TopCategories.Select(c => c.Category).ToList(),
+            Datasets = new List<ChartDataset>
+            {
+                new ChartDataset
+                {
+                    Label = "Error Count",
+                    Data = errorStatistics.TopCategories.Select(c => (double)c.Count).ToList(),
+                    BackgroundColor = string.Join(",", errorStatistics.TopCategories.Select((c, i) => colors[i % colors.Length])),
+                    BorderColor = "#ffffff",
+                    BorderWidth = 2
+                }
+            }
+        };
+
+        errorCategoriesChartOptions = new ChartOptions
+        {
+            Responsive = true,
+            Plugins = new ChartPlugins
+            {
+                Title = new ChartTitle
+                {
+                    Display = true,
+                    Text = "Top Error Categories"
+                },
+                Legend = new ChartLegend
+                {
+                    Display = true,
+                    Position = "right"
+                }
+            }
+        };
+    }
+
+    private async Task RefreshStatistics()
+    {
+        await LoadStatistics();
+        await LoadErrorTrends();
+        StateHasChanged();
+    }
+
+    private Task OnFilterChanged()
+    {
+        // Filters are applied in filteredHistory property, just refresh the display
+        StateHasChanged();
+        return Task.CompletedTask;
+    }
+
+    private async Task BulkAnalyzeErrors()
+    {
+        var errorsToAnalyze = filteredHistory
+            .Where(h => h.IsError && string.IsNullOrEmpty(h.ErrorCategory))
+            .Take(10) // Limit to 10 at a time
+            .ToList();
+
+        if (!errorsToAnalyze.Any())
+        {
+            errorMessage = "No errors to analyze";
+            return;
+        }
+
+        isBulkAnalyzing = true;
+        errorMessage = null;
+
+        try
+        {
+            var response = await BatchJobHistoryService.AnalyzeErrorsBatchAsync(errorsToAnalyze);
+            
+            if (response?.results != null)
+            {
+                // Reload data to get updated analysis results from database
+                await LoadData();
+                await RefreshStatistics(); // Refresh to update charts
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Error in bulk analysis: {ex.Message}";
+        }
+        finally
+        {
+            isBulkAnalyzing = false;
+        }
+    }
+
+    private async Task ResetFilters()
+    {
+        captionPattern = null;
+        createdFrom = null;
+        errorFilter = "all";
+        categoryFilter = null;
+        currentPage = 1;
+        await LoadData();
+    }
+
+    private async Task ChangePage(int page)
+    {
+        currentPage = page;
+        await LoadData();
+    }
+
+    private async Task OnPageSizeChanged()
+    {
+        currentPage = 1;
+        await LoadData();
+    }
+
+    private async Task AnalyzeError(BatchJobHistoryDto item)
+    {
+        if (string.IsNullOrEmpty(item.Reason)) return;
+
+        isAnalyzing = true;
+        analyzingItem = item.Caption;
+        
+        try
+        {
+            var response = await BatchJobHistoryService.AnalyzeErrorAsync(item.Caption, item.CreatedDateTime, item.Reason);
+            if (response?.analysis != null)
+            {
+                selectedErrorAnalysis = response.analysis;
+                // Reload data to get updated analysis results from database
+                await LoadData();
+                StateHasChanged();
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Error analyzing: {ex.Message}";
+        }
+        finally
+        {
+            isAnalyzing = false;
+            analyzingItem = null;
+        }
+    }
+
+    private Task ViewDetails(BatchJobHistoryDto item)
+    {
+        selectedItem = item;
+        selectedErrorAnalysis = null;
+        
+        if (!string.IsNullOrEmpty(item.ErrorAnalysis))
+        {
+            selectedErrorAnalysis = new ErrorAnalysisDto
+            {
+                Category = item.ErrorCategory ?? "Unknown",
+                Severity = item.ErrorSeverity ?? "Info",
+                Explanation = item.ErrorAnalysis ?? "",
+                Suggestions = item.ErrorSuggestions ?? "",
+                AnalyzedAt = item.AnalyzedAt ?? DateTime.UtcNow
+            };
+        }
+        
+        showDetailsModal = true;
+        return Task.CompletedTask;
+    }
+
+    private void CloseDetailsModal()
+    {
+        showDetailsModal = false;
+        selectedItem = null;
+        selectedErrorAnalysis = null;
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        refreshTimer?.Dispose();
+        await Task.CompletedTask;
+    }
+}

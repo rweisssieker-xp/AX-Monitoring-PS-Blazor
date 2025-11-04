@@ -9,11 +9,16 @@ namespace AXMonitoringBU.Api.Controllers;
 public class AlertsController : ControllerBase
 {
     private readonly IAlertService _alertService;
+    private readonly IExportService _exportService;
     private readonly ILogger<AlertsController> _logger;
 
-    public AlertsController(IAlertService alertService, ILogger<AlertsController> logger)
+    public AlertsController(
+        IAlertService alertService, 
+        IExportService exportService,
+        ILogger<AlertsController> logger)
     {
         _alertService = alertService;
+        _exportService = exportService;
         _logger = logger;
     }
 
@@ -116,6 +121,40 @@ public class AlertsController : ControllerBase
         }
 
         return Ok(new { message = $"Alert {id} deleted successfully" });
+    }
+
+    [HttpGet("export/csv")]
+    public async Task<IActionResult> ExportAlertsToCsv([FromQuery] string? status = null)
+    {
+        try
+        {
+            var alerts = await _alertService.GetAlertsAsync(status);
+            var csvBytes = await _exportService.ExportAlertsToCsvAsync(alerts);
+            var filename = $"alerts_{DateTime.UtcNow:yyyyMMdd_HHmmss}.csv";
+            return File(csvBytes, "text/csv", filename);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error exporting alerts to CSV");
+            return StatusCode(500, new { error = "Failed to export alerts" });
+        }
+    }
+
+    [HttpGet("export/excel")]
+    public async Task<IActionResult> ExportAlertsToExcel([FromQuery] string? status = null)
+    {
+        try
+        {
+            var alerts = await _alertService.GetAlertsAsync(status);
+            var excelBytes = await _exportService.ExportAlertsToExcelAsync(alerts);
+            var filename = $"alerts_{DateTime.UtcNow:yyyyMMdd_HHmmss}.xlsx";
+            return File(excelBytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", filename);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error exporting alerts to Excel");
+            return StatusCode(500, new { error = "Failed to export alerts" });
+        }
     }
 }
 

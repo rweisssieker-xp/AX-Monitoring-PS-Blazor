@@ -363,8 +363,20 @@ public class RemediationService : IRemediationService
                     if (actionConfig.TryGetValue("job_id", out var jobId))
                     {
                         var batchJobService = _serviceProvider.GetRequiredService<IBatchJobService>();
-                        // TODO: Implement restart batch job
-                        result["message"] = $"Batch job {jobId} restart requested";
+                        var jobIdStr = jobId?.ToString() ?? "";
+                        if (int.TryParse(jobIdStr, out var jobIdInt))
+                        {
+                            var restarted = await batchJobService.RestartBatchJobAsync(jobIdInt);
+                            result["status"] = restarted ? "success" : "failed";
+                            result["message"] = restarted 
+                                ? $"Batch job {jobId} restarted successfully" 
+                                : $"Failed to restart batch job {jobId}";
+                        }
+                        else
+                        {
+                            result["status"] = "failed";
+                            result["message"] = $"Invalid job ID: {jobId}";
+                        }
                     }
                     break;
 
@@ -372,8 +384,20 @@ public class RemediationService : IRemediationService
                     if (actionConfig.TryGetValue("session_id", out var sessionId))
                     {
                         var sessionService = _serviceProvider.GetRequiredService<ISessionService>();
-                        // TODO: Implement kill session
-                        result["message"] = $"Session {sessionId} kill requested";
+                        var sessionIdStr = sessionId?.ToString() ?? "";
+                        if (int.TryParse(sessionIdStr, out var sessionIdInt))
+                        {
+                            var killed = await sessionService.KillSessionAsync(sessionIdInt);
+                            result["status"] = killed ? "success" : "failed";
+                            result["message"] = killed 
+                                ? $"Session {sessionId} killed successfully" 
+                                : $"Failed to kill session {sessionId}";
+                        }
+                        else
+                        {
+                            result["status"] = "failed";
+                            result["message"] = $"Invalid session ID: {sessionId}";
+                        }
                     }
                     break;
 

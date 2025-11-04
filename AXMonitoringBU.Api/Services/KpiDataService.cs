@@ -13,11 +13,16 @@ public interface IKpiDataService
 public class KpiDataService : IKpiDataService
 {
     private readonly AXDbContext _context;
+    private readonly IAXDatabaseService _axDatabaseService;
     private readonly ILogger<KpiDataService> _logger;
 
-    public KpiDataService(AXDbContext context, ILogger<KpiDataService> logger)
+    public KpiDataService(
+        AXDbContext context, 
+        IAXDatabaseService axDatabaseService,
+        ILogger<KpiDataService> logger)
     {
         _context = context;
+        _axDatabaseService = axDatabaseService;
         _logger = logger;
     }
 
@@ -25,23 +30,23 @@ public class KpiDataService : IKpiDataService
     {
         try
         {
-            var batchBacklog = await _context.BatchJobs
-                .CountAsync(b => b.Status == "Waiting" || b.Status == "Running");
+            // Get batch backlog directly from AX database
+            var batchBacklog = await _axDatabaseService.GetBatchBacklogCountAsync();
+            
+            // Get active sessions directly from AX database
+            var activeSessions = await _axDatabaseService.GetActiveSessionsCountAsync();
 
-            var totalBatches = await _context.BatchJobs.CountAsync();
-            var errorBatches = await _context.BatchJobs.CountAsync(b => b.Status == "Error");
-            var errorRate = totalBatches > 0 ? (errorBatches * 100.0 / totalBatches) : 0;
+            // Get error rate directly from AX database
+            var errorRate = await _axDatabaseService.GetBatchErrorRateAsync();
 
-            var activeSessions = await _context.Sessions
-                .CountAsync(s => s.Status == "Active");
-
+            // Get blocking chains from local database (or could be from AX if available)
             var blockingChains = await _context.BlockingChains
                 .CountAsync(b => b.ResolvedAt == null);
 
             return new Dictionary<string, object>
             {
                 { "batch_backlog", batchBacklog },
-                { "error_rate", Math.Round(errorRate, 1) },
+                { "error_rate", errorRate },
                 { "active_sessions", activeSessions },
                 { "blocking_chains", blockingChains }
             };
@@ -57,37 +62,57 @@ public class KpiDataService : IKpiDataService
     {
         try
         {
-            var latestHealth = await _context.SqlHealthRecords
-                .OrderByDescending(h => h.RecordedAt)
-                .FirstOrDefaultAsync();
-
-            if (latestHealth == null)
+            // Read directly from SQL Server DMVs via AX database connection
+            var sqlHealth = await _axDatabaseService.GetSqlHealthFromDMVsAsync();
+            
+            // Optionally save to local database for history
+            if (sqlHealth != null && sqlHealth.Any())
             {
-                return new Dictionary<string, object>
+                try
                 {
-                    { "cpu_usage", 0.0 },
-                    { "memory_usage", 0.0 },
-                    { "io_wait", 0.0 },
-                    { "tempdb_usage", 0.0 },
-                    { "active_connections", 0 },
-                    { "longest_running_query", 0 }
-                };
+                    var healthRecord = new SqlHealth
+                    {
+                        CpuUsage = Convert.ToDouble(sqlHealth["cpu_usage"]),
+                        MemoryUsage = Convert.ToDouble(sqlHealth["memory_usage"]),
+                        IoWait = Convert.ToDouble(sqlHealth["io_wait"]),
+                        TempDbUsage = Convert.ToDouble(sqlHealth["tempdb_usage"]),
+                        ActiveConnections = Convert.ToInt32(sqlHealth["active_connections"]),
+                        LongestRunningQueryMinutes = Convert.ToInt32(sqlHealth["longest_running_query"]),
+                        RecordedAt = DateTime.UtcNow
+                    };
+                    
+                    _context.SqlHealthRecords.Add(healthRecord);
+                    await _context.SaveChangesAsync();
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Error saving SQL health to local database");
+                }
             }
 
-            return new Dictionary<string, object>
+            return sqlHealth ?? new Dictionary<string, object>
             {
-                { "cpu_usage", latestHealth.CpuUsage },
-                { "memory_usage", latestHealth.MemoryUsage },
-                { "io_wait", latestHealth.IoWait },
-                { "tempdb_usage", latestHealth.TempDbUsage },
-                { "active_connections", latestHealth.ActiveConnections },
-                { "longest_running_query", latestHealth.LongestRunningQueryMinutes }
+                { "cpu_usage", 0.0 },
+                { "memory_usage", 0.0 },
+                { "io_wait", 0.0 },
+                { "tempdb_usage", 0.0 },
+                { "active_connections", 0 },
+                { "longest_running_query", 0 }
             };
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error getting SQL health data");
-            throw;
+            // Return default values on error
+            return new Dictionary<string, object>
+            {
+                { "cpu_usage", 0.0 },
+                { "memory_usage", 0.0 },
+                { "io_wait", 0.0 },
+                { "tempdb_usage", 0.0 },
+                { "active_connections", 0 },
+                { "longest_running_query", 0 }
+            };
         }
     }
 }
