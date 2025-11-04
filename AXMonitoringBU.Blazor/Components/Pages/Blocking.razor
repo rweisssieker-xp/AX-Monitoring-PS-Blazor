@@ -1,0 +1,157 @@
+@page "/blocking"
+@using AXMonitoringBU.Blazor.Services
+@using AXMonitoringBU.Blazor.Components
+@inject IBlockingService BlockingService
+@inject IMetricsService MetricsService
+
+<PageTitle>Blocking - AX Monitoring BU</PageTitle>
+
+<h3>🔒 Blocking & Deadlocks Monitor</h3>
+
+<div class="mb-3">
+    <button class="btn btn-primary" @onclick="RefreshData">🔄 Refresh Data</button>
+</div>
+
+@if (isLoading)
+{
+    <p>Loading...</p>
+}
+else
+{
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <MetricCard Title="Total Blocking" Value="@totalBlocking.ToString()" Color="#1f77b4" Delta="@($"+{totalBlocking}")" />
+        </div>
+        <div class="col-md-3">
+            <MetricCard Title="Locks" Value="@lockBlocking.ToString()" Color="#dc3545" Delta="@($"+{lockBlocking}")" />
+        </div>
+        <div class="col-md-3">
+            <MetricCard Title="Deadlocks" Value="@deadlockBlocking.ToString()" Color="#ffc107" Delta="@($"+{deadlockBlocking}")" />
+        </div>
+        <div class="col-md-3">
+            <MetricCard Title="Avg Duration (sec)" Value="@avgDuration.ToString("F1")" Color="#17a2b8" />
+        </div>
+    </div>
+
+    @if (criticalBlocking.Any())
+    {
+        <div class="alert alert-danger mb-4">
+            <h5>🚨 Critical Blocking Detected</h5>
+            <ul class="mb-0">
+                @foreach (var blocking in criticalBlocking)
+                {
+                    <li>Session @blocking.BlockingSessionId is blocking @blocking.BlockedSessionId for @blocking.DurationSeconds seconds</li>
+                }
+            </ul>
+        </div>
+    }
+    else if (blockingChains == null || !blockingChains.Any())
+    {
+        <div class="alert alert-success mb-4">✅ No blocking chains detected</div>
+    }
+
+    @if (blockingChains != null && blockingChains.Any())
+    {
+        <div class="row mb-4">
+            <div class="col-12">
+                <h4>📋 Blocking Chains Details</h4>
+                <div class="table-responsive">
+                    <table class="table table-striped table-hover">
+                        <thead>
+                            <tr>
+                                <th>Blocking Session</th>
+                                <th>Blocked Session</th>
+                                <th>Type</th>
+                                <th>Resource</th>
+                                <th>Duration (sec)</th>
+                                <th>SQL Text</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var chain in blockingChains)
+                            {
+                                <tr>
+                                    <td>@chain.BlockingSessionId</td>
+                                    <td>@chain.BlockedSessionId</td>
+                                    <td><StatusBadge Status="@chain.BlockingType" Text="@chain.BlockingType" /></td>
+                                    <td>@chain.Resource</td>
+                                    <td>@chain.DurationSeconds</td>
+                                    <td>
+                                        <small>@(chain.SqlText?.Length > 50 ? chain.SqlText.Substring(0, 50) + "..." : chain.SqlText ?? "N/A")</small>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <div class="row mb-4">
+            <div class="col-12">
+                <h4>🔍 SQL Details</h4>
+                @foreach (var chain in blockingChains)
+                {
+                    <div class="card mb-3">
+                        <div class="card-header">
+                            Blocking Chain: @chain.BlockingSessionId → @chain.BlockedSessionId
+                        </div>
+                        <div class="card-body">
+                            <p><strong>Blocking Type:</strong> @chain.BlockingType</p>
+                            <p><strong>Resource:</strong> @chain.Resource</p>
+                            <p><strong>Duration:</strong> @chain.DurationSeconds seconds</p>
+                            @if (!string.IsNullOrEmpty(chain.SqlText))
+                            {
+                                <p><strong>SQL Text:</strong></p>
+                                <pre class="bg-light p-3"><code>@chain.SqlText</code></pre>
+                            }
+                        </div>
+                    </div>
+                }
+            </div>
+        </div>
+    }
+}
+
+@code {
+    private bool isLoading = true;
+    private List<BlockingChainDto>? blockingChains;
+    private int totalBlocking => blockingChains?.Count ?? 0;
+    private int lockBlocking => blockingChains?.Count(b => b.BlockingType == "Lock") ?? 0;
+    private int deadlockBlocking => blockingChains?.Count(b => b.BlockingType == "Deadlock") ?? 0;
+    private double avgDuration => blockingChains?.Any() == true 
+        ? blockingChains.Average(b => b.DurationSeconds) 
+        : 0;
+    private List<BlockingChainDto> criticalBlocking => blockingChains?
+        .Where(b => b.DurationSeconds > 60)
+        .ToList() ?? new List<BlockingChainDto>();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadData();
+    }
+
+    private async Task LoadData()
+    {
+        isLoading = true;
+        try
+        {
+            var response = await BlockingService.GetBlockingChainsAsync(true);
+            blockingChains = response?.blocking_chains;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading blocking chains: {ex.Message}");
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task RefreshData()
+    {
+        await LoadData();
+    }
+}
+

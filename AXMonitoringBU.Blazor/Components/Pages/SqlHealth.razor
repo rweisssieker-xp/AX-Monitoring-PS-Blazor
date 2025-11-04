@@ -1,0 +1,131 @@
+@page "/sql-health"
+@using AXMonitoringBU.Blazor.Services
+@using AXMonitoringBU.Blazor.Components
+@inject IMetricsService MetricsService
+
+<PageTitle>SQL Health - AX Monitoring BU</PageTitle>
+
+<h3>💾 SQL Health Monitor</h3>
+
+<div class="mb-3">
+    <button class="btn btn-primary" @onclick="RefreshData">🔄 Refresh Data</button>
+</div>
+
+@if (isLoading)
+{
+    <p>Loading...</p>
+}
+else
+{
+    @if (healthStatus == "GOOD")
+    {
+        <div class="alert alert-success mb-4">✅ SQL Server Health: GOOD</div>
+    }
+    else if (healthStatus == "CRITICAL")
+    {
+        <div class="alert alert-danger mb-4">🚨 SQL Server Health: CRITICAL</div>
+    }
+    else if (healthStatus == "WARNING")
+    {
+        <div class="alert alert-warning mb-4">⚠️ SQL Server Health: WARNING</div>
+    }
+
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <MetricCard Title="CPU Usage" Value="@($"{sqlHealth?.cpu_usage:F1}%")" 
+                       Color="@(sqlHealth?.cpu_usage > 80 ? "#dc3545" : "#28a745")" />
+        </div>
+        <div class="col-md-3">
+            <MetricCard Title="Memory Usage" Value="@($"{sqlHealth?.memory_usage:F1}%")" 
+                       Color="@(sqlHealth?.memory_usage > 85 ? "#dc3545" : "#28a745")" />
+        </div>
+        <div class="col-md-3">
+            <MetricCard Title="IO Wait" Value="@($"{sqlHealth?.io_wait:F1}%")" 
+                       Color="@(sqlHealth?.io_wait > 20 ? "#ffc107" : "#28a745")" />
+        </div>
+        <div class="col-md-3">
+            <MetricCard Title="TempDB Usage" Value="@($"{sqlHealth?.tempdb_usage:F1}%")" 
+                       Color="@(sqlHealth?.tempdb_usage > 80 ? "#dc3545" : "#28a745")" />
+        </div>
+    </div>
+
+    <div class="row mb-4">
+        <div class="col-md-6">
+            <MetricCard Title="Active Connections" Value="@sqlHealth?.active_connections.ToString()" Color="#17a2b8" />
+        </div>
+        <div class="col-md-6">
+            <MetricCard Title="Longest Query (min)" Value="@sqlHealth?.longest_running_query.ToString()" Color="#6c757d" />
+        </div>
+    </div>
+
+    <div class="row mb-4">
+        <div class="col-12">
+            <h4>📊 Resource Usage</h4>
+            <div class="card">
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-3">
+                            <div class="text-center">
+                                <ProgressBar Percentage="@((int)(sqlHealth?.cpu_usage ?? 0))" Label="CPU Usage" Height="30px" />
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="text-center">
+                                <ProgressBar Percentage="@((int)(sqlHealth?.memory_usage ?? 0))" Label="Memory Usage" Height="30px" />
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="text-center">
+                                <ProgressBar Percentage="@((int)(sqlHealth?.io_wait ?? 0))" Label="IO Wait" Height="30px" />
+                            </div>
+                        </div>
+                        <div class="col-md-3">
+                            <div class="text-center">
+                                <ProgressBar Percentage="@((int)(sqlHealth?.tempdb_usage ?? 0))" Label="TempDB Usage" Height="30px" />
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private bool isLoading = true;
+    private SqlHealthData? sqlHealth;
+    private string healthStatus => 
+        sqlHealth == null ? "UNKNOWN" :
+        sqlHealth.cpu_usage < 80 && sqlHealth.memory_usage < 85 && sqlHealth.io_wait < 20 && sqlHealth.tempdb_usage < 80 ? "GOOD" :
+        sqlHealth.cpu_usage >= 80 || sqlHealth.memory_usage >= 85 ? "CRITICAL" :
+        "WARNING";
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadData();
+    }
+
+    private async Task LoadData()
+    {
+        isLoading = true;
+        try
+        {
+            var metrics = await MetricsService.GetCurrentMetricsAsync();
+            sqlHealth = metrics?.sql_health;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading SQL health: {ex.Message}");
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task RefreshData()
+    {
+        await LoadData();
+    }
+}
+

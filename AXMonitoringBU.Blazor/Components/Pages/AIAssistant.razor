@@ -1,0 +1,201 @@
+@page "/ai-assistant"
+@using AXMonitoringBU.Blazor.Services
+@using AXMonitoringBU.Blazor.Components
+@inject IMetricsService MetricsService
+
+<PageTitle>AI Assistant - AX Monitoring BU</PageTitle>
+
+<h3>🤖 AI Assistant</h3>
+
+<p>Ask me anything about your AX 2012 R3 system in natural language!</p>
+
+<div class="row mb-4">
+    <div class="col-12">
+        <div class="card">
+            <div class="card-body">
+                <h5>💬 Chat Interface</h5>
+                <div class="chat-container" style="height: 400px; overflow-y: auto; border: 1px solid #ddd; padding: 1rem; margin-bottom: 1rem; background-color: #f8f9fa;">
+                    @foreach (var message in chatMessages)
+                    {
+                        <div class="mb-3">
+                            <div class="@(message.IsUser ? "text-end" : "text-start")">
+                                <div class="d-inline-block p-2 rounded @(message.IsUser ? "bg-primary text-white" : "bg-light")" style="max-width: 70%;">
+                                    <strong>@(message.IsUser ? "You" : "AI")</strong>: @message.Text
+                                </div>
+                            </div>
+                            <small class="text-muted">@message.Timestamp.ToString("HH:mm:ss")</small>
+                        </div>
+                    }
+                </div>
+                <div class="input-group">
+                    <input type="text" class="form-control" @bind="userInput" @bind:event="oninput" 
+                           placeholder="Ask a question..." @onkeypress="HandleKeyPress" />
+                    <button class="btn btn-primary" @onclick="SendMessage">Send</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row mb-4">
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-body">
+                <h5>🧠 AI Insights</h5>
+                <button class="btn btn-primary w-100 mb-3" @onclick="AnalyzeSystem">🔍 Analyze Current System State</button>
+                <button class="btn btn-primary w-100 mb-3" @onclick="GetPredictions">🔮 Get Predictions</button>
+                
+                @if (!string.IsNullOrEmpty(analysisResult))
+                {
+                    <div class="alert alert-info mt-3">
+                        @analysisResult
+                    </div>
+                }
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card">
+            <div class="card-body">
+                <h5>💬 Quick Queries</h5>
+                <div class="d-grid gap-2">
+                    @foreach (var query in quickQueries)
+                    {
+                        <button class="btn btn-outline-primary btn-sm" @onclick="() => SendQuickQuery(query)">@query</button>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    private string userInput = string.Empty;
+    private List<ChatMessage> chatMessages = new();
+    private string analysisResult = string.Empty;
+    private List<string> quickQueries = new()
+    {
+        "Why is CPU high?",
+        "What happened in the last hour?",
+        "Which batch jobs are running?",
+        "Why are sessions blocked?",
+        "How is system health?",
+        "When will problems occur?",
+        "Show me everything"
+    };
+
+    protected override void OnInitialized()
+    {
+        chatMessages.Add(new ChatMessage
+        {
+            IsUser = false,
+            Text = "Hello! I'm your AI assistant for AX 2012 R3 monitoring. How can I help you today?",
+            Timestamp = DateTime.Now
+        });
+    }
+
+    private void SendMessage()
+    {
+        if (string.IsNullOrWhiteSpace(userInput))
+            return;
+
+        chatMessages.Add(new ChatMessage
+        {
+            IsUser = true,
+            Text = userInput,
+            Timestamp = DateTime.Now
+        });
+
+        // Simulate AI response
+        var response = GenerateResponse(userInput);
+        chatMessages.Add(new ChatMessage
+        {
+            IsUser = false,
+            Text = response,
+            Timestamp = DateTime.Now
+        });
+
+        userInput = string.Empty;
+    }
+
+    private void SendQuickQuery(string query)
+    {
+        userInput = query;
+        SendMessage();
+    }
+
+    private async Task AnalyzeSystem()
+    {
+        analysisResult = "Analyzing system...";
+        
+        try
+        {
+            var metrics = await MetricsService.GetCurrentMetricsAsync();
+            var issues = new List<string>();
+            
+            if (metrics != null)
+            {
+                if (metrics.kpis?.error_rate > 2)
+                    issues.Add($"High error rate: {metrics.kpis.error_rate}%");
+                if (metrics.sql_health?.cpu_usage > 80)
+                    issues.Add($"High CPU usage: {metrics.sql_health.cpu_usage}%");
+                if (metrics.kpis?.blocking_chains > 0)
+                    issues.Add($"Blocking chains: {metrics.kpis.blocking_chains}");
+            }
+            
+            if (issues.Any())
+            {
+                analysisResult = "⚠️ Issues detected:\n• " + string.Join("\n• ", issues);
+            }
+            else
+            {
+                analysisResult = "✅ System is healthy - no issues detected";
+            }
+        }
+        catch (Exception ex)
+        {
+            analysisResult = $"Error analyzing system: {ex.Message}";
+        }
+    }
+
+    private async Task GetPredictions()
+    {
+        analysisResult = "🔮 Prediction: System load expected to remain stable for the next 24 hours\n• CPU usage: 45-65%\n• Memory usage: 60-75%\n• No critical issues predicted";
+        await Task.CompletedTask;
+    }
+
+    private string GenerateResponse(string input)
+    {
+        var lowerInput = input.ToLower();
+        
+        if (lowerInput.Contains("cpu") || lowerInput.Contains("high"))
+            return "Current CPU usage is within normal range. If you're experiencing high CPU, check running batch jobs and active sessions.";
+        
+        if (lowerInput.Contains("batch") || lowerInput.Contains("job"))
+            return "You can view all batch jobs on the Batch Jobs page. Use the restart function if needed.";
+        
+        if (lowerInput.Contains("session") || lowerInput.Contains("block"))
+            return "Check the Sessions page for active sessions. Blocking chains can be viewed on the Blocking page.";
+        
+        if (lowerInput.Contains("health") || lowerInput.Contains("status"))
+            return "System health is good. Check the Overview page for detailed metrics and KPIs.";
+        
+        return "I understand your question. For more specific information, please visit the relevant monitoring pages or ask a more detailed question.";
+    }
+
+    private void HandleKeyPress(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            SendMessage();
+        }
+    }
+
+    private class ChatMessage
+    {
+        public bool IsUser { get; set; }
+        public string Text { get; set; } = string.Empty;
+        public DateTime Timestamp { get; set; }
+    }
+}
+

@@ -1,0 +1,218 @@
+@page "/business-intelligence"
+@using AXMonitoringBU.Blazor.Services
+@using AXMonitoringBU.Blazor.Components
+@inject IMetricsService MetricsService
+
+<PageTitle>Business Intelligence - AX Monitoring BU</PageTitle>
+
+<h3>📊 Business Intelligence</h3>
+
+@if (isLoading)
+{
+    <p>Loading...</p>
+}
+else
+{
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <MetricCard Title="System Availability" Value="@(businessKpis?.TryGetValue("system_uptime", out var uptime) == true ? $"{uptime.Value:F1}%" : "N/A")" 
+                       Color="@(businessKpis?.TryGetValue("system_uptime", out var uptimeKpi) == true && (uptimeKpi.Status == "excellent" || uptimeKpi.Status == "good") ? "#28a745" : "#ffc107")" />
+        </div>
+        <div class="col-md-3">
+            <MetricCard Title="Avg Response Time" Value="@(businessKpis?.TryGetValue("average_response_time", out var responseTime) == true ? $"{responseTime.Value:F0}ms" : "N/A")" 
+                       Color="@(businessKpis?.TryGetValue("average_response_time", out var responseKpi) == true && (responseKpi.Status == "excellent" || responseKpi.Status == "good") ? "#28a745" : "#ffc107")" />
+        </div>
+        <div class="col-md-3">
+            <MetricCard Title="Throughput" Value="@(businessKpis?.TryGetValue("throughput", out var throughput) == true ? throughput.Value.ToString("F0") : "N/A")" 
+                       Color="@(businessKpis?.TryGetValue("throughput", out var throughputKpi) == true && (throughputKpi.Status == "excellent" || throughputKpi.Status == "good") ? "#28a745" : "#ffc107")" />
+        </div>
+        <div class="col-md-3">
+            <MetricCard Title="SLA Compliance" Value="@($"{impactReport?.SlaCompliancePercentage:F1}%")" 
+                       Color="@(impactReport?.SlaCompliancePercentage > 95 ? "#28a745" : "#ffc107")" />
+        </div>
+    </div>
+
+    <div class="row mb-4">
+        <div class="col-12">
+            <h4>💼 Business Impact Assessment</h4>
+            <div class="card">
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-4">
+                            <div class="text-center">
+                                <h5>Overall Health</h5>
+                                <h2 class="@(impactReport?.OverallBusinessHealth > 80 ? "text-success" : "text-warning")">@impactReport?.OverallBusinessHealth.ToString("F1")%</h2>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="text-center">
+                                <h5>SLA Compliance</h5>
+                                <h2 class="@(impactReport?.SlaCompliancePercentage > 95 ? "text-success" : "text-warning")">@impactReport?.SlaCompliancePercentage.ToString("F1")%</h2>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="text-center">
+                                <h5>Critical Issues</h5>
+                                <h2 class="@(impactReport?.CriticalIssuesCount == 0 ? "text-success" : "text-danger")">@impactReport?.CriticalIssuesCount</h2>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    @if (impactReport?.CriticalIssues != null && impactReport.CriticalIssues.Any())
+    {
+        <div class="alert alert-danger mb-4">
+            <h5>🚨 Critical Issues</h5>
+            <ul class="mb-0">
+                @foreach (var issue in impactReport.CriticalIssues)
+                {
+                    <li>@issue</li>
+                }
+            </ul>
+        </div>
+    }
+
+    <div class="row mb-4">
+        <div class="col-12">
+            <h4>📋 Business KPIs Details</h4>
+            <div class="card">
+                <div class="card-body">
+                    <div class="table-responsive">
+                        <table class="table table-striped">
+                            <thead>
+                                <tr>
+                                    <th>KPI</th>
+                                    <th>Value</th>
+                                    <th>Target</th>
+                                    <th>Status</th>
+                                    <th>Category</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @if (businessKpis != null)
+                                {
+                                    @foreach (var kpi in businessKpis.Values)
+                                    {
+                                        <tr>
+                                            <td>@kpi.Name</td>
+                                            <td>@($"{kpi.Value:F1}{kpi.Unit}")</td>
+                                            <td>@($"{kpi.TargetValue:F1}{kpi.Unit}")</td>
+                                            <td><StatusBadge Status="@(kpi.Status == "excellent" || kpi.Status == "good" ? "good" : kpi.Status == "warning" ? "warning" : "critical")" Text="@kpi.Status" /></td>
+                                            <td>@kpi.Category</td>
+                                        </tr>
+                                    }
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    @if (impactReport?.Recommendations != null && impactReport.Recommendations.Any())
+    {
+        <div class="row mb-4">
+            <div class="col-12">
+                <h4>💡 Recommendations</h4>
+                <div class="card">
+                    <div class="card-body">
+                        <ul class="mb-0">
+                            @foreach (var recommendation in impactReport.Recommendations)
+                            {
+                                <li>@recommendation</li>
+                            }
+                        </ul>
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+
+    <div class="row mb-4">
+        <div class="col-12">
+            <h4>📄 Report Generation</h4>
+            <div class="card">
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-4">
+                            <select class="form-select mb-3" @bind="reportType">
+                                <option value="executive">Executive Summary</option>
+                                <option value="detailed">Detailed Report</option>
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <select class="form-select mb-3" @bind="reportPeriod">
+                                <option value="daily">Daily</option>
+                                <option value="weekly">Weekly</option>
+                                <option value="monthly">Monthly</option>
+                            </select>
+                        </div>
+                        <div class="col-md-4">
+                            <button class="btn btn-primary w-100" @onclick="GenerateReport">Generate Report</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private bool isLoading = true;
+    private Dictionary<string, BusinessKpiResultDto>? businessKpis;
+    private BusinessImpactReportDto? impactReport;
+    private string reportType = "executive";
+    private string reportPeriod = "monthly";
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadData();
+    }
+
+    private async Task LoadData()
+    {
+        isLoading = true;
+        try
+        {
+            var response = await MetricsService.GetBusinessKpisAsync();
+            businessKpis = response?.business_kpis;
+            
+            var impactResponse = await MetricsService.GetBusinessImpactAsync();
+            impactReport = impactResponse;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading business KPIs: {ex.Message}");
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task GenerateReport()
+    {
+        try
+        {
+            var endpoint = reportType == "executive" ? "api/v1/reports/executive" : "api/v1/reports/detailed";
+            var response = await MetricsService.GenerateReportAsync(endpoint, reportPeriod);
+            
+            if (response != null)
+            {
+                // Trigger download
+                var url = $"/{endpoint}";
+                Console.WriteLine($"Report generated: {url}");
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error generating report: {ex.Message}");
+        }
+    }
+}
+
+

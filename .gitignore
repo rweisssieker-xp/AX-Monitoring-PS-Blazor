@@ -1,131 +1,258 @@
-# ============================================
-# PowerShell Specific
-# ============================================
+# Build results
+bin/
+obj/
+out/
+*.dll
+*.exe
+*.pdb
 
-# PowerShell Transcripts
-PowerShell_transcript.*.txt
-
-# PowerShell Module Build Artifacts
-*.nupkg
-*.nuspec
-
-# Pester Test Results
-testResults.xml
-*.Tests.ps1.xml
-
-# PSScriptAnalyzer Results
-PSScriptAnalyzerSettings.psd1
-
-# PowerShell Gallery API Key
-PSGalleryApiKey.txt
-
-# ============================================
-# IDE and Editor Files
-# ============================================
-
-# VS Code
-.vscode/
-*.code-workspace
-
-# Visual Studio
-.vs/
+# User-specific files
 *.suo
 *.user
 *.userosscache
 *.sln.docstates
 
-# JetBrains IDEs (IntelliJ, Rider, etc.)
+# Visual Studio cache/options
+.vs/
+.vscode/
+*.swp
+*.swo
+*~
+
+# Rider
 .idea/
-*.iml
-*.ipr
-*.iws
+*.sln.iml
 
-# ============================================
-# Environment and Configuration
-# ============================================
+# Build results
+[Dd]ebug/
+[Dd]ebugPublic/
+[Rr]elease/
+[Rr]eleases/
+x64/
+x86/
+[Aa][Rr][Mm]/
+[Aa][Rr][Mm]64/
+bld/
+[Bb]in/
+[Oo]bj/
+[Ll]og/
+[Ll]ogs/
 
-# Environment files with secrets
-.env
-.env.*
-!.env.example
+# MSTest test Results
+[Tt]est[Rr]esult*/
+[Bb]uild[Ll]og.*
 
-# Configuration files with sensitive data
-config.ini
-secrets.json
-credentials.json
-appsettings.*.json
-!appsettings.json
+# .NET Core
+project.lock.json
+project.fragment.lock.json
+artifacts/
 
-# ============================================
-# Database Files
-# ============================================
-*.db
-*.sqlite
-*.sqlite3
+# ASP.NET Scaffolding
+ScaffoldingReadMe.txt
+
+# Files built by Visual Studio
+*_i.c
+*_p.c
+*_h.h
+*.ilk
+*.meta
+*.obj
+*.iobj
+*.pch
+*.pdb
+*.ipdb
+*.pgc
+*.pgd
+*.rsp
+*.sbr
+*.tlb
+*.tli
+*.tlh
+*.tmp
+*.tmp_proj
+*_wpftmp.csproj
+*.log
+*.vspscc
+*.vssscc
+.builds
+*.pidb
+*.svclog
+*.scc
+
+# Visual C++ cache files
+ipch/
+*.aps
+*.ncb
+*.opendb
+*.opensdf
+*.sdf
+*.cachefile
+*.VC.db
+*.VC.VC.opendb
+
+# Visual Studio profiler
+*.psess
+*.vsp
+*.vspx
+*.sap
+
+# Visual Studio Trace Files
+*.e2e
+
+# TFS 2012 Local Workspace
+$tf/
+
+# Guidance Automation Toolkit
+*.gpState
+
+# ReSharper
+_ReSharper*/
+*.[Rr]e[Ss]harper
+*.DotSettings.user
+
+# TeamCity
+_TeamCity*
+
+# JetBrains Rider
+.idea/
+*.sln.iml
+
+# CodeRush
+.cr/personal
+
+# Python Tools for Visual Studio (PTVS)
+__pycache__/
+*.pyc
+
+# Cake - Uncomment if you are using it
+# tools/**
+# !tools/packages.config
+
+# NuGet Packages
+*.nupkg
+*.snupkg
+**/packages/*
+!**/packages/build/
+*.nuget.props
+*.nuget.targets
+
+# Entity Framework
+*.edmx.diagram
+*.edmx.sql
+
+# SQL Server files
 *.mdf
 *.ldf
-*.bak
+*.ndf
 
-# ============================================
-# Log Files
-# ============================================
-*.log
+# Business Intelligence projects
+*.rdl.data
+*.bim.layout
+*.bim_*.settings
+*.rptproj.rsuser
+*- [Bb]ackup.rdl
+*- [Bb]ackup ([0-9]).rdl
+*- [Bb]ackup ([0-9][0-9]).rdl
+
+# Microsoft Fakes
+FakesAssemblies/
+
+# GhostDoc plugin setting file
+*.GhostDoc.xml
+
+# Node.js Tools for Visual Studio
+.ntvs_analysis.dat
+node_modules/
+
+# Visual Studio 6 build log
+*.plg
+
+# Visual Studio 6 workspace options file
+*.opt
+
+# Visual Studio 6 auto-generated workspace file (contains which files were open etc.)
+*.vbw
+
+# Visual Studio LightSwitch build output
+**/*.HTMLClient/GeneratedArtifacts
+**/*.DesktopClient/GeneratedArtifacts
+**/*.DesktopClient/ModelManifest.xml
+**/*.Server/GeneratedArtifacts
+**/*.Server/ModelManifest.xml
+_Pvt_Extensions
+
+# Paket dependency manager
+.paket/paket.exe
+paket-files/
+
+# FAKE - F# Make
+.fake/
+
+# CodeRush personal settings
+.cr/personal
+
+# Python Tools for Visual Studio (PTVS)
+__pycache__/
+*.pyc
+
+# Cake - Uncomment if you are using it
+# tools/**
+# !tools/packages.config
+
+# JetBrains Rider
+.idea/
+*.sln.iml
+
+# User-specific files
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+
+# Logs
 logs/
-PowerShell/Logs/*.log
-PowerShell/Logs/*.txt
+*.log
 
-# ============================================
-# Temporary Files
-# ============================================
-*.tmp
-*.temp
-temp/
-tmp/
-~$*
-
-# ============================================
-# OS Generated Files
-# ============================================
-
-# macOS
+# OS generated files
 .DS_Store
 .DS_Store?
 ._*
 .Spotlight-V100
 .Trashes
-
-# Windows
 ehthumbs.db
 Thumbs.db
-Desktop.ini
-*.lnk
 
-# ============================================
-# Project Specific
-# ============================================
+# Temporary files
+*.tmp
+*.temp
+temp/
+tmp/
 
-# Data directories
-data/
-cache/
-.cache/
+# Coverage reports
+coverage/
+*.coverage
+*.coveragexml
 
-# Build outputs
-build/
-dist/
-out/
+# Database
+*.db
+*.sqlite
+*.sqlite3
 
-# Pode specific
-.pode/
+# Configuration files with sensitive data (keep template)
+config.ini
+secrets.json
+credentials.json
+!appsettings.json
+!appsettings.Development.json
+!appsettings.Production.json
 
-# AI/ML models (if any)
-models/
-*.pkl
-*.h5
-*.model
-
-# Hidden files (with exceptions)
+# All hidden directories and files (starting with .)
 .*
 !.gitignore
 !.gitkeep
-!.gitattributes
-!.env.example
+!.github

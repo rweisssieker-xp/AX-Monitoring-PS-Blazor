@@ -1,0 +1,139 @@
+@page "/batch-jobs"
+@using AXMonitoringBU.Blazor.Services
+@using AXMonitoringBU.Blazor.Components
+@inject IBatchJobService BatchJobService
+
+<PageTitle>Batch Jobs - AX Monitoring BU</PageTitle>
+
+<h3>⚙️ Batch Jobs Monitor</h3>
+
+<div class="mb-3">
+    <button class="btn btn-primary" @onclick="RefreshData">🔄 Refresh Data</button>
+</div>
+
+@if (isLoading)
+{
+    <p>Loading...</p>
+}
+else
+{
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <MetricCard Title="Total Jobs" Value="@totalJobs.ToString()" Color="#1f77b4" />
+        </div>
+        <div class="col-md-3">
+            <MetricCard Title="Running" Value="@runningJobs.ToString()" Color="#28a745" Delta="@($"+{runningJobs}")" />
+        </div>
+        <div class="col-md-3">
+            <MetricCard Title="Errors" Value="@errorJobs.ToString()" Color="#dc3545" Delta="@($"+{errorJobs}")" />
+        </div>
+        <div class="col-md-3">
+            <MetricCard Title="Completed" Value="@completedJobs.ToString()" Color="#17a2b8" Delta="@($"+{completedJobs}")" />
+        </div>
+    </div>
+
+    <div class="row mb-4">
+        <div class="col-12">
+            <h4>📋 Batch Jobs Details</h4>
+            @if (batchJobs != null && batchJobs.Any())
+            {
+                <div class="table-responsive">
+                    <table class="table table-striped table-hover">
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Name</th>
+                                <th>Status</th>
+                                <th>AOS Server</th>
+                                <th>Progress</th>
+                                <th>Start Time</th>
+                                <th>Duration (min)</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var job in batchJobs)
+                            {
+                                <tr>
+                                    <td>@job.BatchJobId</td>
+                                    <td>@job.Name</td>
+                                    <td><StatusBadge Status="@job.Status" Text="@job.Status" /></td>
+                                    <td>@job.AosServer</td>
+                                    <td>
+                                        <ProgressBar Percentage="@job.Progress" ShowLabel="true" />
+                                    </td>
+                                    <td>@(job.StartTime?.ToString("HH:mm:ss") ?? "Not started")</td>
+                                    <td>@(job.EstimatedDuration?.ToString() ?? "N/A")</td>
+                                    <td>
+                                        @if (job.Status == "Error" || job.Status == "Waiting")
+                                        {
+                                            <button class="btn btn-sm btn-primary" @onclick="() => RestartJob(job.Id)">Restart</button>
+                                        }
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+            else
+            {
+                <div class="alert alert-info">No batch jobs found</div>
+            }
+        </div>
+    </div>
+}
+
+@code {
+    private bool isLoading = true;
+    private List<BatchJobDto>? batchJobs;
+    private int totalJobs => batchJobs?.Count ?? 0;
+    private int runningJobs => batchJobs?.Count(j => j.Status == "Running") ?? 0;
+    private int errorJobs => batchJobs?.Count(j => j.Status == "Error") ?? 0;
+    private int completedJobs => batchJobs?.Count(j => j.Status == "Completed") ?? 0;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadData();
+    }
+
+    private async Task LoadData()
+    {
+        isLoading = true;
+        try
+        {
+            var response = await BatchJobService.GetBatchJobsAsync();
+            batchJobs = response?.batch_jobs;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading batch jobs: {ex.Message}");
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task RefreshData()
+    {
+        await LoadData();
+    }
+
+    private async Task RestartJob(int jobId)
+    {
+        try
+        {
+            var success = await BatchJobService.RestartBatchJobAsync(jobId);
+            if (success)
+            {
+                await LoadData(); // Refresh the list
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error restarting job: {ex.Message}");
+        }
+    }
+}
+

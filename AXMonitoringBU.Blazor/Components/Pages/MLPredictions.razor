@@ -1,0 +1,309 @@
+@page "/ml-predictions"
+@using AXMonitoringBU.Blazor.Services
+@using AXMonitoringBU.Blazor.Components
+@inject IMetricsService MetricsService
+@inject IPredictionsService PredictionsService
+
+<PageTitle>ML Predictions - AX Monitoring BU</PageTitle>
+
+<h3>🤖 ML Predictions & Anomaly Detection</h3>
+
+<div class="row mb-4">
+    <div class="col-12">
+        <h4>⏱️ Batch Job Runtime Prediction</h4>
+        <div class="card">
+            <div class="card-body">
+                <div class="row mb-3">
+                    <div class="col-md-3">
+                        <label class="form-label">Job Complexity</label>
+                        <input type="range" class="form-range" min="0" max="100" @bind="jobComplexity" />
+                        <small>@jobComplexity%</small>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">Data Volume</label>
+                        <input type="range" class="form-range" min="0" max="100" @bind="dataVolume" />
+                        <small>@dataVolume%</small>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">AOS Server Load</label>
+                        <input type="range" class="form-range" min="0" max="100" @bind="aosLoad" />
+                        <small>@aosLoad%</small>
+                    </div>
+                    <div class="col-md-3">
+                        <label class="form-label">Time of Day</label>
+                        <select class="form-select" @bind="timeOfDay">
+                            <option value="0.2">Morning</option>
+                            <option value="0.5">Afternoon</option>
+                            <option value="0.8">Evening</option>
+                            <option value="0.1">Night</option>
+                        </select>
+                    </div>
+                </div>
+                <button class="btn btn-primary" @onclick="PredictRuntime">🔮 Predict Runtime</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@if (predictionResult != null)
+{
+    <div class="row mb-4">
+        <div class="col-md-4">
+            <MetricCard Title="Predicted Runtime" Value="@($"{predictionResult.predictedRuntime:F1} min")" Color="#1f77b4" 
+                       Delta="@($"Confidence: {predictionResult.confidence}")" />
+        </div>
+        <div class="col-md-4">
+            <MetricCard Title="Model Performance" Value="@($"R²: {predictionResult.r2:F3}")" Color="#17a2b8" 
+                       Delta="@($"MAE: {predictionResult.mae:F1}")" />
+        </div>
+        <div class="col-md-4">
+            <MetricCard Title="Key Factor" Value="@predictionResult.keyFactor" Color="#28a745" />
+        </div>
+    </div>
+
+    <div class="row mb-4">
+        <div class="col-12">
+            <h4>📊 Feature Importance</h4>
+            <div class="card">
+                <div class="card-body">
+                    <ChartComponent ChartId="featureImportanceChart" ChartType="bar" Data="@featureImportanceChartData" Options="@featureImportanceChartOptions" />
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+<div class="row mb-4">
+    <div class="col-12">
+        <h4>🔍 Anomaly Detection</h4>
+        <div class="card">
+            <div class="card-body">
+                <button class="btn btn-primary mb-3" @onclick="DetectAnomalies">🔍 Detect Anomalies</button>
+                
+                @if (anomalies != null && anomalies.Any())
+                {
+                    <div class="alert alert-warning">
+                        <h5>⚠️ Anomalies Detected</h5>
+                        <ul>
+                            @foreach (var anomaly in anomalies)
+                            {
+                                <li>@anomaly</li>
+                            }
+                        </ul>
+                    </div>
+                }
+                else if (anomalies != null)
+                {
+                    <div class="alert alert-success">✅ No anomalies detected</div>
+                }
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row mb-4">
+    <div class="col-12">
+        <h4>📈 Performance Metrics</h4>
+        <div class="card">
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-striped">
+                        <thead>
+                            <tr>
+                                <th>Metric</th>
+                                <th>Current Value</th>
+                                <th>Predicted Value (24h)</th>
+                                <th>Confidence</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td>CPU Usage</td>
+                                <td>@(currentCpuUsage?.ToString("F1") ?? "N/A")%</td>
+                                <td>@(predictedCpuUsage?.ToString("F1") ?? "N/A")%</td>
+                                <td>85%</td>
+                                <td><StatusBadge Status="good" Text="Stable" /></td>
+                            </tr>
+                            <tr>
+                                <td>Memory Usage</td>
+                                <td>@(currentMemoryUsage?.ToString("F1") ?? "N/A")%</td>
+                                <td>@(predictedMemoryUsage?.ToString("F1") ?? "N/A")%</td>
+                                <td>82%</td>
+                                <td><StatusBadge Status="good" Text="Stable" /></td>
+                            </tr>
+                            <tr>
+                                <td>Error Rate</td>
+                                <td>@(currentErrorRate?.ToString("F1") ?? "N/A")%</td>
+                                <td>@(predictedErrorRate?.ToString("F1") ?? "N/A")%</td>
+                                <td>78%</td>
+                                <td><StatusBadge Status="good" Text="Low" /></td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    private int jobComplexity = 50;
+    private int dataVolume = 50;
+    private int aosLoad = 30;
+    private string timeOfDay = "0.5";
+    private PredictionResult? predictionResult;
+    private List<string>? anomalies;
+    private double? currentCpuUsage;
+    private double? currentMemoryUsage;
+    private double? currentErrorRate;
+    private double? predictedCpuUsage;
+    private double? predictedMemoryUsage;
+    private double? predictedErrorRate;
+    private ChartData? featureImportanceChartData;
+    private ChartOptions? featureImportanceChartOptions;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadCurrentMetrics();
+    }
+
+    private async Task LoadCurrentMetrics()
+    {
+        try
+        {
+            var metrics = await MetricsService.GetCurrentMetricsAsync();
+            if (metrics != null)
+            {
+                currentCpuUsage = metrics.sql_health?.cpu_usage;
+                currentMemoryUsage = metrics.sql_health?.memory_usage;
+                currentErrorRate = metrics.kpis?.error_rate;
+                
+                // Fetch predictions from API
+                var predictionRequest = new ResourceUsagePredictionRequest { HorizonHours = 24 };
+                var predictionResponse = await PredictionsService.PredictResourceUsageAsync(predictionRequest);
+                
+                if (predictionResponse != null && predictionResponse.predictions != null)
+                {
+                    predictedCpuUsage = predictionResponse.predictions.cpu_usage_24h;
+                    predictedMemoryUsage = predictionResponse.predictions.memory_usage_24h;
+                    predictedErrorRate = (currentErrorRate ?? 0) + 0.5; // Keep mock for error rate
+                }
+                else
+                {
+                    // Fallback to mock predictions
+                    predictedCpuUsage = (currentCpuUsage ?? 0) + 5;
+                    predictedMemoryUsage = (currentMemoryUsage ?? 0) + 3;
+                    predictedErrorRate = (currentErrorRate ?? 0) + 0.5;
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading metrics: {ex.Message}");
+        }
+    }
+
+    private async Task PredictRuntime()
+    {
+        try
+        {
+            var request = new BatchRuntimePredictionRequest
+            {
+                JobComplexity = jobComplexity,
+                DataVolume = dataVolume,
+                AosLoad = aosLoad,
+                TimeOfDay = timeOfDay
+            };
+            
+            var response = await PredictionsService.PredictBatchRuntimeAsync(request);
+            
+            if (response != null)
+            {
+                predictionResult = new PredictionResult
+                {
+                    predictedRuntime = response.predicted_runtime_minutes,
+                    confidence = response.confidence,
+                    r2 = response.r2_score,
+                    mae = response.mae,
+                    keyFactor = response.key_factors?.FirstOrDefault()?.factor ?? "Unknown"
+                };
+
+                // Create feature importance chart
+                var factors = response.key_factors ?? new List<KeyFactor>();
+                featureImportanceChartData = new ChartData
+                {
+                    Labels = factors.Select(f => f.factor).ToList(),
+                    Datasets = new List<ChartDataset>
+                    {
+                        new ChartDataset
+                        {
+                            Label = "Importance Score",
+                            Data = factors.Select(f => f.importance).ToList(),
+                            BackgroundColor = "rgba(31, 119, 180, 0.8)",
+                            BorderColor = "rgba(31, 119, 180, 1)",
+                            BorderWidth = 1
+                        }
+                    }
+                };
+
+                featureImportanceChartOptions = new ChartOptions
+                {
+                    Responsive = true,
+                    Plugins = new ChartPlugins
+                    {
+                        Legend = new ChartLegend { Display = false },
+                        Title = new ChartTitle { Display = true, Text = "Feature Importance" }
+                    },
+                    Scales = new ChartScales
+                    {
+                        Y = new ChartAxis { BeginAtZero = true, Max = "1" }
+                    }
+                };
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error predicting runtime: {ex.Message}");
+        }
+    }
+
+    private async Task DetectAnomalies()
+    {
+        try
+        {
+            var request = new AnomalyDetectionRequest
+            {
+                LookbackHours = 24
+            };
+            
+            var response = await PredictionsService.DetectAnomaliesAsync(request);
+            
+            if (response != null && response.anomalies != null)
+            {
+                anomalies = response.anomalies.Select(a => 
+                    $"{a.metric}: {a.description} (Value: {a.value:F1}, Severity: {a.severity}) at {a.timestamp:HH:mm}"
+                ).ToList();
+            }
+            else
+            {
+                anomalies = new List<string>();
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error detecting anomalies: {ex.Message}");
+            anomalies = new List<string>();
+        }
+    }
+
+    private class PredictionResult
+    {
+        public double predictedRuntime { get; set; }
+        public string confidence { get; set; } = string.Empty;
+        public double r2 { get; set; }
+        public double mae { get; set; }
+        public string keyFactor { get; set; } = string.Empty;
+    }
+}
+

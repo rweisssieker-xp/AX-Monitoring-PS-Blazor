@@ -1,0 +1,313 @@
+@page "/"
+@page "/overview"
+@using AXMonitoringBU.Blazor.Services
+@inject IMetricsService MetricsService
+@inject ISignalRService SignalRService
+@inject IAlertService AlertService
+@implements IAsyncDisposable
+
+<PageTitle>Overview - AX Monitoring BU</PageTitle>
+
+<h3>System Overview</h3>
+@if (isSignalRConnected)
+{
+    <span class="badge bg-success">🟢 Real-time Updates Active</span>
+}
+else
+{
+    <span class="badge bg-secondary">⚪ Real-time Updates Inactive</span>
+}
+
+@if (isLoading)
+{
+    <p>Loading...</p>
+}
+else
+{
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <div class="card">
+                <div class="card-body">
+                    <h5 class="card-title">Batch Backlog</h5>
+                    <h2 class="text-primary">@(kpiData?.batch_backlog ?? 0)</h2>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card">
+                <div class="card-body">
+                    <h5 class="card-title">Error Rate</h5>
+                    <h2 class="@(errorRate > 5 ? "text-danger" : "text-success")">@errorRate.ToString("F1")%</h2>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card">
+                <div class="card-body">
+                    <h5 class="card-title">Active Sessions</h5>
+                    <h2 class="text-success">@(kpiData?.active_sessions ?? 0)</h2>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card">
+                <div class="card-body">
+                    <h5 class="card-title">Blocking Chains</h5>
+                    <h2 class="@(blockingChains > 0 ? "text-warning" : "text-success")">@blockingChains</h2>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row mb-4">
+        <div class="col-12">
+            <h4>System Status</h4>
+            <div class="row">
+                <div class="col-md-3">
+                    <div class="card">
+                        <div class="card-body text-center">
+                            <h6>CPU Usage</h6>
+                            <h3 class="@(sqlHealth?.cpu_usage > 80 ? "text-danger" : "text-success")">@sqlHealth?.cpu_usage.ToString("F1")%</h3>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="card">
+                        <div class="card-body text-center">
+                            <h6>Memory Usage</h6>
+                            <h3 class="@(sqlHealth?.memory_usage > 85 ? "text-danger" : "text-success")">@sqlHealth?.memory_usage.ToString("F1")%</h3>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="card">
+                        <div class="card-body text-center">
+                            <h6>Active Connections</h6>
+                            <h3 class="text-info">@sqlHealth?.active_connections</h3>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="card">
+                        <div class="card-body text-center">
+                            <h6>Longest Query</h6>
+                            <h3 class="text-secondary">@sqlHealth?.longest_running_query min</h3>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row">
+        <div class="col-12">
+            <h4>Recent Alerts</h4>
+            @if (recentAlerts != null && recentAlerts.Any())
+            {
+                <div class="list-group">
+                    @foreach (var alert in recentAlerts)
+                    {
+                        <div class="list-group-item">
+                            <div class="d-flex w-100 justify-content-between">
+                                <h5 class="mb-1">@alert.Type</h5>
+                                <small>@alert.Timestamp.ToString("HH:mm:ss")</small>
+                            </div>
+                            <p class="mb-1">@alert.Message</p>
+                            <small class="badge bg-@(alert.Severity.ToLower() == "critical" ? "danger" : alert.Severity.ToLower() == "warning" ? "warning" : "info")">@alert.Severity</small>
+                        </div>
+                    }
+                </div>
+            }
+            else
+            {
+                <div class="alert alert-success">No active alerts</div>
+            }
+        </div>
+    </div>
+}
+
+@code {
+    private bool isLoading = true;
+    private bool isSignalRConnected = false;
+    private KpiData? kpiData;
+    private SqlHealthData? sqlHealth;
+    private List<AlertDto>? recentAlerts;
+    private double errorRate => kpiData?.error_rate ?? 0;
+    private int blockingChains => kpiData?.blocking_chains ?? 0;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            await LoadData();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading initial data: {ex.Message}");
+            // Set defaults to prevent crash
+            kpiData = null;
+            sqlHealth = null;
+            recentAlerts = new List<AlertDto>();
+            isLoading = false;
+        }
+        
+        // Don't block on SignalR - let it initialize in background
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                await InitializeSignalR();
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"SignalR initialization failed: {ex.Message}");
+            }
+        });
+    }
+
+    private async Task InitializeSignalR()
+    {
+        try
+        {
+            await SignalRService.StartAsync();
+            isSignalRConnected = true;
+
+            SignalRService.OnKpiUpdated += HandleKpiUpdate;
+            SignalRService.OnAlertsUpdated += HandleAlertsUpdate;
+            SignalRService.OnSystemStatusUpdated += HandleSystemStatusUpdate;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error initializing SignalR: {ex.Message}");
+            isSignalRConnected = false;
+        }
+    }
+
+    private void HandleKpiUpdate(KpiUpdateData data)
+    {
+        _ = InvokeAsync(() =>
+        {
+            try
+            {
+                if (data.kpis != null)
+                {
+                    // Convert dictionary to KpiData
+                    kpiData = new KpiData
+                    {
+                        batch_backlog = data.kpis.TryGetValue("batch_backlog", out var backlog) ? Convert.ToInt32(backlog) : 0,
+                        error_rate = data.kpis.TryGetValue("error_rate", out var errorRate) ? Convert.ToDouble(errorRate) : 0,
+                        active_sessions = data.kpis.TryGetValue("active_sessions", out var sessions) ? Convert.ToInt32(sessions) : 0,
+                        blocking_chains = data.kpis.TryGetValue("blocking_chains", out var blocking) ? Convert.ToInt32(blocking) : 0
+                    };
+                }
+                if (data.sql_health != null)
+                {
+                    // Convert dictionary to SqlHealthData
+                    sqlHealth = new SqlHealthData
+                    {
+                        cpu_usage = data.sql_health.TryGetValue("cpu_usage", out var cpu) ? Convert.ToDouble(cpu) : 0,
+                        memory_usage = data.sql_health.TryGetValue("memory_usage", out var memory) ? Convert.ToDouble(memory) : 0,
+                        io_wait = data.sql_health.TryGetValue("io_wait", out var io) ? Convert.ToDouble(io) : 0,
+                        tempdb_usage = data.sql_health.TryGetValue("tempdb_usage", out var tempdb) ? Convert.ToDouble(tempdb) : 0,
+                        active_connections = data.sql_health.TryGetValue("active_connections", out var connections) ? Convert.ToInt32(connections) : 0,
+                        longest_running_query = data.sql_health.TryGetValue("longest_running_query", out var query) ? Convert.ToInt32(query) : 0
+                    };
+                }
+                StateHasChanged();
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error handling KPI update: {ex.Message}");
+            }
+        });
+    }
+
+    private void HandleAlertsUpdate(AlertsUpdateData data)
+    {
+        _ = InvokeAsync(() =>
+        {
+            try
+            {
+                if (data.alerts != null)
+                {
+                    recentAlerts = data.alerts.Select(a => new AlertDto
+                    {
+                        Type = a.Type,
+                        Severity = a.Severity,
+                        Message = a.Message,
+                        Timestamp = a.Timestamp
+                    }).ToList();
+                }
+                StateHasChanged();
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error handling alerts update: {ex.Message}");
+            }
+        });
+    }
+
+    private void HandleSystemStatusUpdate(SystemStatusData data)
+    {
+        // Handle system status updates if needed
+    }
+
+    private async Task LoadData()
+    {
+        isLoading = true;
+        try
+        {
+            var metrics = await MetricsService.GetCurrentMetricsAsync();
+            if (metrics != null)
+            {
+                kpiData = metrics.kpis;
+                sqlHealth = metrics.sql_health;
+            }
+
+            // Load alerts from API
+            var alertsResponse = await AlertService.GetAlertsAsync("Active");
+            if (alertsResponse?.alerts != null)
+            {
+                recentAlerts = alertsResponse.alerts.Take(5).Select(a => new AlertDto
+                {
+                    Type = a.Type,
+                    Severity = a.Severity,
+                    Message = a.Message,
+                    Timestamp = a.Timestamp
+                }).ToList();
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading data: {ex.Message}");
+            // Don't crash - just show empty state
+            kpiData = null;
+            sqlHealth = null;
+            recentAlerts = new List<AlertDto>();
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (SignalRService != null)
+        {
+            SignalRService.OnKpiUpdated -= HandleKpiUpdate;
+            SignalRService.OnAlertsUpdated -= HandleAlertsUpdate;
+            SignalRService.OnSystemStatusUpdated -= HandleSystemStatusUpdate;
+            await SignalRService.StopAsync();
+        }
+    }
+
+    public class AlertDto
+    {
+        public string Type { get; set; } = string.Empty;
+        public string Severity { get; set; } = string.Empty;
+        public string Message { get; set; } = string.Empty;
+        public DateTime Timestamp { get; set; }
+    }
+}
+

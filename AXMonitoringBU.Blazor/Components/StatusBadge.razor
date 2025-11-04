@@ -1,0 +1,22 @@
+@namespace AXMonitoringBU.Blazor.Components
+
+<span class="badge @GetBadgeClass()">@Text</span>
+
+@code {
+    [Parameter] public string Status { get; set; } = string.Empty;
+    [Parameter] public string Text { get; set; } = string.Empty;
+
+    private string GetBadgeClass()
+    {
+        return Status.ToLower() switch
+        {
+            "active" or "running" => "bg-success",
+            "completed" or "resolved" => "bg-info",
+            "error" or "critical" => "bg-danger",
+            "waiting" or "warning" => "bg-warning",
+            "idle" => "bg-secondary",
+            _ => "bg-secondary"
+        };
+    }
+}
+

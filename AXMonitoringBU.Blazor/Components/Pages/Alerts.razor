@@ -1,0 +1,213 @@
+@page "/alerts"
+@using AXMonitoringBU.Blazor.Services
+@using AXMonitoringBU.Blazor.Components
+@inject IAlertService AlertService
+
+<PageTitle>Alerts - AX Monitoring BU</PageTitle>
+
+<h3>🚨 Alerts Monitor</h3>
+
+@if (isLoading)
+{
+    <p>Loading...</p>
+}
+else
+{
+    <div class="row mb-4">
+        <div class="col-md-3">
+            <MetricCard Title="Total Alerts" Value="@totalAlerts.ToString()" Color="#1f77b4" />
+        </div>
+        <div class="col-md-3">
+            <MetricCard Title="Active" Value="@activeAlerts.ToString()" Color="#dc3545" Delta="@($"+{activeAlerts}")" />
+        </div>
+        <div class="col-md-3">
+            <MetricCard Title="Critical" Value="@criticalAlerts.ToString()" Color="#dc3545" Delta="@($"+{criticalAlerts}")" />
+        </div>
+        <div class="col-md-3">
+            <MetricCard Title="Warnings" Value="@warningAlerts.ToString()" Color="#ffc107" Delta="@($"+{warningAlerts}")" />
+        </div>
+    </div>
+
+    <div class="mb-3">
+        <div class="btn-group" role="group">
+            <button class="btn btn-outline-primary" @onclick='() => FilterAlerts(null)'>All</button>
+            <button class="btn btn-outline-primary" @onclick='() => FilterAlerts("Active")'>Active</button>
+            <button class="btn btn-outline-primary" @onclick='() => FilterAlerts("Resolved")'>Resolved</button>
+            <button class="btn btn-primary" @onclick="RefreshData">🔄 Refresh</button>
+        </div>
+    </div>
+
+    @if (activeAlertsList.Any())
+    {
+        <div class="card mb-4">
+            <div class="card-header">
+                <h5>🚨 Active Alerts</h5>
+            </div>
+            <div class="card-body">
+                @foreach (var alert in activeAlertsList)
+                {
+                    var severityIcon = alert.Severity switch
+                    {
+                        "Critical" => "🔴",
+                        "Warning" => "🟡",
+                        "Info" => "🔵",
+                        _ => "⚪"
+                    };
+                    <div class="alert alert-@(alert.Severity.ToLower() == "critical" ? "danger" : alert.Severity.ToLower() == "warning" ? "warning" : "info") mb-3">
+                        <div class="d-flex justify-content-between align-items-start">
+                            <div>
+                                <h6 class="alert-heading">@severityIcon @alert.Type - @alert.Severity</h6>
+                                <p class="mb-1">@alert.Message</p>
+                                <small>Alert ID: @alert.AlertId | Timestamp: @alert.Timestamp.ToString("yyyy-MM-dd HH:mm:ss")</small>
+                            </div>
+                            <div class="btn-group-vertical">
+                                <button class="btn btn-sm btn-success" @onclick="() => ResolveAlert(alert.Id)">Resolve</button>
+                                <button class="btn btn-sm btn-secondary" @onclick="() => DeleteAlert(alert.Id)">Delete</button>
+                            </div>
+                        </div>
+                    </div>
+                }
+            </div>
+        </div>
+    }
+
+    <div class="row mb-4">
+        <div class="col-12">
+            <h4>📋 All Alerts</h4>
+            @if (filteredAlerts != null && filteredAlerts.Any())
+            {
+                <div class="table-responsive">
+                    <table class="table table-striped table-hover">
+                        <thead>
+                            <tr>
+                                <th>ID</th>
+                                <th>Type</th>
+                                <th>Severity</th>
+                                <th>Message</th>
+                                <th>Status</th>
+                                <th>Timestamp</th>
+                                <th>Time Ago</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var alert in filteredAlerts)
+                            {
+                                var timeAgo = DateTime.Now - alert.Timestamp;
+                                <tr>
+                                    <td>@alert.AlertId</td>
+                                    <td>@alert.Type</td>
+                                    <td>
+                                        <span class="badge bg-@(alert.Severity.ToLower() == "critical" ? "danger" : alert.Severity.ToLower() == "warning" ? "warning" : "info")">
+                                            @alert.Severity
+                                        </span>
+                                    </td>
+                                    <td>@alert.Message</td>
+                                    <td><StatusBadge Status="@alert.Status" Text="@alert.Status" /></td>
+                                    <td>@alert.Timestamp.ToString("HH:mm:ss")</td>
+                                    <td>@(timeAgo.TotalMinutes.ToString("F0")) min ago</td>
+                                    <td>
+                                        <button class="btn btn-sm btn-success" @onclick="() => ResolveAlert(alert.Id)">Resolve</button>
+                                        <button class="btn btn-sm btn-danger" @onclick="() => DeleteAlert(alert.Id)">Delete</button>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+            else
+            {
+                <div class="alert alert-success">✅ No alerts found</div>
+            }
+        </div>
+    </div>
+}
+
+@code {
+    private bool isLoading = true;
+    private List<AlertDto>? allAlerts;
+    private List<AlertDto>? filteredAlerts;
+    private string? currentFilter = null;
+
+    private int totalAlerts => allAlerts?.Count ?? 0;
+    private int activeAlerts => allAlerts?.Count(a => a.Status == "Active") ?? 0;
+    private int criticalAlerts => allAlerts?.Count(a => a.Severity == "Critical") ?? 0;
+    private int warningAlerts => allAlerts?.Count(a => a.Severity == "Warning") ?? 0;
+    private List<AlertDto> activeAlertsList => allAlerts?.Where(a => a.Status == "Active").ToList() ?? new List<AlertDto>();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadData();
+    }
+
+    private async Task LoadData()
+    {
+        isLoading = true;
+        try
+        {
+            var response = await AlertService.GetAlertsAsync();
+            allAlerts = response?.alerts;
+            FilterAlerts(currentFilter);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading alerts: {ex.Message}");
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private void FilterAlerts(string? status)
+    {
+        currentFilter = status;
+        if (string.IsNullOrEmpty(status))
+        {
+            filteredAlerts = allAlerts;
+        }
+        else
+        {
+            filteredAlerts = allAlerts?.Where(a => a.Status == status).ToList();
+        }
+    }
+
+    private async Task RefreshData()
+    {
+        await LoadData();
+    }
+
+    private async Task ResolveAlert(int alertId)
+    {
+        try
+        {
+            var success = await AlertService.UpdateAlertStatusAsync(alertId, "Resolved");
+            if (success)
+            {
+                await LoadData();
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error resolving alert: {ex.Message}");
+        }
+    }
+
+    private async Task DeleteAlert(int alertId)
+    {
+        try
+        {
+            var success = await AlertService.DeleteAlertAsync(alertId);
+            if (success)
+            {
+                await LoadData();
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error deleting alert: {ex.Message}");
+        }
+    }
+}
+

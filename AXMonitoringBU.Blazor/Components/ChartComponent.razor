@@ -1,0 +1,129 @@
+@namespace AXMonitoringBU.Blazor.Components
+@inject IJSRuntime JSRuntime
+@implements IAsyncDisposable
+
+<div class="chart-container">
+    <canvas id="@ChartId"></canvas>
+</div>
+
+@code {
+    [Parameter] public string ChartId { get; set; } = Guid.NewGuid().ToString();
+    [Parameter] public string ChartType { get; set; } = "line"; // line, bar, pie, etc.
+    [Parameter] public ChartData? Data { get; set; }
+    [Parameter] public ChartOptions? Options { get; set; }
+
+    private IJSObjectReference? chartInstance;
+    private bool isInitialized = false;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender && Data != null)
+        {
+            await InitializeChart();
+        }
+        else if (Data != null && isInitialized)
+        {
+            await UpdateChart();
+        }
+    }
+
+    private async Task InitializeChart()
+    {
+        if (Data == null) return;
+
+        try
+        {
+            var chartData = new
+            {
+                labels = Data.Labels?.ToArray() ?? Array.Empty<string>(),
+                datasets = Data.Datasets.Select(d => new
+                {
+                    label = d.Label,
+                    data = d.Data?.ToArray() ?? Array.Empty<double>(),
+                    backgroundColor = d.BackgroundColor ?? "rgba(54, 162, 235, 0.2)",
+                    borderColor = d.BorderColor ?? "rgba(54, 162, 235, 1)",
+                    borderWidth = d.BorderWidth
+                }).ToArray()
+            };
+
+            var chartOptions = new
+            {
+                responsive = Options?.Responsive ?? true,
+                maintainAspectRatio = false,
+                plugins = new
+                {
+                    legend = new
+                    {
+                        display = Options?.Plugins?.Legend?.Display ?? true,
+                        position = Options?.Plugins?.Legend?.Position ?? "top"
+                    },
+                    title = new
+                    {
+                        display = Options?.Plugins?.Title?.Display ?? true,
+                        text = Options?.Plugins?.Title?.Text ?? ""
+                    }
+                },
+                scales = Options?.Scales != null ? new
+                {
+                    y = new
+                    {
+                        beginAtZero = Options.Scales.Y?.BeginAtZero ?? true,
+                        max = Options.Scales.Y?.Max
+                    }
+                } : null
+            };
+
+            chartInstance = await JSRuntime.InvokeAsync<IJSObjectReference>(
+                "window.chartHelper.createChart", ChartId, ChartType, chartData, chartOptions);
+            
+            isInitialized = true;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error initializing chart: {ex.Message}");
+        }
+    }
+
+    private async Task UpdateChart()
+    {
+        if (chartInstance == null || Data == null) return;
+
+        try
+        {
+            var chartData = new
+            {
+                labels = Data.Labels?.ToArray() ?? Array.Empty<string>(),
+                datasets = Data.Datasets.Select(d => new
+                {
+                    label = d.Label,
+                    data = d.Data?.ToArray() ?? Array.Empty<double>(),
+                    backgroundColor = d.BackgroundColor ?? "rgba(54, 162, 235, 0.2)",
+                    borderColor = d.BorderColor ?? "rgba(54, 162, 235, 1)",
+                    borderWidth = d.BorderWidth
+                }).ToArray()
+            };
+
+            await JSRuntime.InvokeVoidAsync("window.chartHelper.updateChart", chartInstance, chartData);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error updating chart: {ex.Message}");
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (chartInstance != null)
+        {
+            try
+            {
+                await JSRuntime.InvokeVoidAsync("window.chartHelper.destroyChart", chartInstance);
+                await chartInstance.DisposeAsync();
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error disposing chart: {ex.Message}");
+            }
+        }
+    }
+}

@@ -1,0 +1,199 @@
+@page "/admin"
+@using AXMonitoringBU.Blazor.Services
+@using AXMonitoringBU.Blazor.Components
+@inject IMetricsService MetricsService
+@inject IAlertService AlertService
+
+<PageTitle>Administration - AX Monitoring BU</PageTitle>
+
+<h3>⚙️ Administration</h3>
+
+<div class="row mb-4">
+    <div class="col-md-12">
+        <h4>🏥 System Health</h4>
+        <div class="card">
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-md-4">
+                        <div class="text-center">
+                            <h5>Health Score</h5>
+                            <h2 class="@(healthScore >= 90 ? "text-success" : healthScore >= 70 ? "text-warning" : "text-danger")">@healthScore%</h2>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="text-center">
+                            <h5>Uptime</h5>
+                            <h2 class="text-success">99.9%</h2>
+                        </div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="text-center">
+                            <h5>Last Restart</h5>
+                            <h2 class="text-info">7 days ago</h2>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row mb-4">
+    <div class="col-md-12">
+        <h4>🔗 Data Sources</h4>
+        <div class="card">
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-striped">
+                        <thead>
+                            <tr>
+                                <th>Name</th>
+                                <th>Type</th>
+                                <th>Status</th>
+                                <th>Last Update</th>
+                                <th>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td>AX2012R3_PROD_DB</td>
+                                <td>SQL Server</td>
+                                <td><StatusBadge Status="Connected" Text="Connected" /></td>
+                                <td>2 min ago</td>
+                                <td>
+                                    <button class="btn btn-sm btn-primary">Test</button>
+                                    <button class="btn btn-sm btn-secondary">Refresh</button>
+                                </td>
+                            </tr>
+                            <tr>
+                                <td>AOS01_Server</td>
+                                <td>AOS Server</td>
+                                <td><StatusBadge Status="Connected" Text="Connected" /></td>
+                                <td>1 min ago</td>
+                                <td>
+                                    <button class="btn btn-sm btn-primary">Test</button>
+                                    <button class="btn btn-sm btn-secondary">Refresh</button>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row mb-4">
+    <div class="col-md-12">
+        <h4>📊 Monitoring Thresholds</h4>
+        <div class="card">
+            <div class="card-body">
+                <div class="table-responsive">
+                    <table class="table table-striped">
+                        <thead>
+                            <tr>
+                                <th>Metric</th>
+                                <th>Warning Threshold</th>
+                                <th>Critical Threshold</th>
+                                <th>Current Value</th>
+                                <th>Status</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td>CPU Usage</td>
+                                <td>70%</td>
+                                <td>80%</td>
+                                <td>@(currentCpuUsage?.ToString("F1") ?? "N/A")%</td>
+                                <td>
+                                    <StatusBadge Status="@(currentCpuUsage > 80 ? "critical" : currentCpuUsage > 70 ? "warning" : "good")" 
+                                               Text="@(currentCpuUsage > 80 ? "Critical" : currentCpuUsage > 70 ? "Warning" : "OK")" />
+                                </td>
+                            </tr>
+                            <tr>
+                                <td>Memory Usage</td>
+                                <td>75%</td>
+                                <td>85%</td>
+                                <td>@(currentMemoryUsage?.ToString("F1") ?? "N/A")%</td>
+                                <td>
+                                    <StatusBadge Status="@(currentMemoryUsage > 85 ? "critical" : currentMemoryUsage > 75 ? "warning" : "good")" 
+                                               Text="@(currentMemoryUsage > 85 ? "Critical" : currentMemoryUsage > 75 ? "Warning" : "OK")" />
+                                </td>
+                            </tr>
+                            <tr>
+                                <td>Error Rate</td>
+                                <td>5%</td>
+                                <td>10%</td>
+                                <td>@(currentErrorRate?.ToString("F1") ?? "N/A")%</td>
+                                <td>
+                                    <StatusBadge Status="@(currentErrorRate > 10 ? "critical" : currentErrorRate > 5 ? "warning" : "good")" 
+                                               Text="@(currentErrorRate > 10 ? "Critical" : currentErrorRate > 5 ? "Warning" : "OK")" />
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row mb-4">
+    <div class="col-md-12">
+        <h4>⚙️ System Configuration</h4>
+        <div class="card">
+            <div class="card-body">
+                <div class="mb-3">
+                    <label class="form-label">Check Interval (minutes)</label>
+                    <input type="number" class="form-control" value="5" />
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Data Retention (days)</label>
+                    <input type="number" class="form-control" value="90" />
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Refresh Interval (seconds)</label>
+                    <input type="number" class="form-control" value="30" />
+                </div>
+                <button class="btn btn-primary">Save Configuration</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    private double? currentCpuUsage;
+    private double? currentMemoryUsage;
+    private double? currentErrorRate;
+    private int healthScore = 95;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadData();
+    }
+
+    private async Task LoadData()
+    {
+        try
+        {
+            var metrics = await MetricsService.GetCurrentMetricsAsync();
+            if (metrics != null)
+            {
+                currentCpuUsage = metrics.sql_health?.cpu_usage;
+                currentMemoryUsage = metrics.sql_health?.memory_usage;
+                currentErrorRate = metrics.kpis?.error_rate;
+
+                // Calculate health score
+                healthScore = 100;
+                if (currentErrorRate > 10) healthScore -= 20;
+                if (currentCpuUsage > 80) healthScore -= 15;
+                if (currentMemoryUsage > 85) healthScore -= 15;
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading admin data: {ex.Message}");
+        }
+    }
+}
+

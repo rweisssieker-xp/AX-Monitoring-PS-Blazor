@@ -1,0 +1,39 @@
+@namespace AXMonitoringBU.Blazor.Components
+
+<div class="progress mb-2" style="height: @Height">
+    <div class="progress-bar @GetProgressBarClass()" 
+         role="progressbar" 
+         style="width: @Percentage%;" 
+         aria-valuenow="@Percentage" 
+         aria-valuemin="0" 
+         aria-valuemax="100">
+        @if (ShowLabel)
+        {
+            <span>@Percentage%</span>
+        }
+    </div>
+</div>
+@if (!string.IsNullOrEmpty(Label))
+{
+    <small class="text-muted">@Label</small>
+}
+
+@code {
+    [Parameter] public int Percentage { get; set; }
+    [Parameter] public string? Label { get; set; }
+    [Parameter] public bool ShowLabel { get; set; } = true;
+    [Parameter] public string Height { get; set; } = "20px";
+
+    private string GetProgressBarClass()
+    {
+        return Percentage switch
+        {
+            >= 100 => "bg-success",
+            >= 75 => "bg-info",
+            >= 50 => "bg-primary",
+            >= 25 => "bg-warning",
+            _ => "bg-danger"
+        };
+    }
+}
+
