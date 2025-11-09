@@ -375,29 +375,26 @@ else if (summary != null)
         _ => "bg-secondary"
     };
 
-    private string GetLoadBarColor(double loadPercentage) => loadPercentage switch
+    private string GetLoadBarColor(double loadPercentage)
     {
-        < 50 => "bg-success",
-        < 75 => "bg-warning",
-        _ => "bg-danger"
-    };
+        if (loadPercentage < 50) return "bg-success";
+        if (loadPercentage < 75) return "bg-warning";
+        return "bg-danger";
+    }
 
-    private string GetCapacityBarColor(double capacity) => capacity switch
+    private string GetCapacityBarColor(double capacity)
     {
-        < 60 => "bg-success",
-        < 80 => "bg-warning",
-        _ => "bg-danger"
-    };
+        if (capacity < 60) return "bg-success";
+        if (capacity < 80) return "bg-warning";
+        return "bg-danger";
+    }
 
     private string GetHeatmapRowClass(int errorCount, int jobCount)
     {
         if (errorCount == 0) return "";
         var errorRate = jobCount > 0 ? (double)errorCount / jobCount * 100 : 0;
-        return errorRate switch
-        {
-            < 5 => "table-warning",
-            < 10 => "table-danger",
-            _ => "table-danger"
-        };
+        if (errorRate < 5) return "table-warning";
+        if (errorRate < 10) return "table-danger";
+        return "table-danger";
     }
 }

@@ -9,7 +9,7 @@ public interface IBatchJobHistoryService
     Task<ErrorAnalysisResponse?> AnalyzeErrorAsync(string caption, DateTime? createdDateTime, string errorReason);
     Task<BatchAnalysisResponse?> AnalyzeErrorsBatchAsync(List<BatchJobHistoryDto> items);
     Task<ErrorTrendsResponse?> GetErrorTrendsAsync(DateTime? fromDate = null, DateTime? toDate = null);
-    Task<ErrorSummaryResponse?> GetErrorSummaryAsync(DateTime? fromDate = null, DateTime? toDate = null);
+    Task<BatchJobErrorSummaryResponse?> GetErrorSummaryAsync(DateTime? fromDate = null, DateTime? toDate = null);
 }
 
 public class BatchJobHistoryService : IBatchJobHistoryService
@@ -87,7 +87,7 @@ public class BatchJobHistoryService : IBatchJobHistoryService
         return await _apiService.GetAsync<ErrorTrendsResponse>(endpoint);
     }
 
-    public async Task<ErrorSummaryResponse?> GetErrorSummaryAsync(DateTime? fromDate = null, DateTime? toDate = null)
+    public async Task<BatchJobErrorSummaryResponse?> GetErrorSummaryAsync(DateTime? fromDate = null, DateTime? toDate = null)
     {
         var queryParams = new List<string>();
         if (fromDate.HasValue)
@@ -105,7 +105,7 @@ public class BatchJobHistoryService : IBatchJobHistoryService
             endpoint += "?" + string.Join("&", queryParams);
         }
 
-        return await _apiService.GetAsync<ErrorSummaryResponse>(endpoint);
+        return await _apiService.GetAsync<BatchJobErrorSummaryResponse>(endpoint);
     }
 }
 
@@ -173,7 +173,7 @@ public class ErrorTrendDto
     public Dictionary<string, int>? Categories { get; set; }
 }
 
-public class ErrorSummaryResponse
+public class BatchJobErrorSummaryResponse
 {
     public ErrorStatisticsDto? statistics { get; set; }
     public string? summary { get; set; }

@@ -69,6 +69,7 @@ else
                                 <th>Resource</th>
                                 <th>Duration (sec)</th>
                                 <th>SQL Text</th>
+                                <th>Actions</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -82,6 +83,9 @@ else
                                     <td>@chain.DurationSeconds</td>
                                     <td>
                                         <small>@(chain.SqlText?.Length > 50 ? chain.SqlText.Substring(0, 50) + "..." : chain.SqlText ?? "N/A")</small>
+                                    </td>
+                                    <td>
+                                        <button class="btn btn-sm btn-info" @onclick="() => ViewBlockingDetails(chain)">View Details</button>
                                     </td>
                                 </tr>
                             }
@@ -152,6 +156,67 @@ else
         </div>
     }
 
+    @if (showBlockingDetails && selectedBlockingChain != null)
+    {
+        <div class="modal show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.5);">
+            <div class="modal-dialog modal-lg">
+                <div class="modal-content">
+                    <div class="modal-header">
+                        <h5 class="modal-title">Blocking Chain Details</h5>
+                        <button type="button" class="btn-close" @onclick="CloseBlockingDetails"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="row mb-3">
+                            <div class="col-md-6">
+                                <div class="card">
+                                    <div class="card-header bg-danger text-white">
+                                        <h6 class="mb-0">🚫 Blocking Session</h6>
+                                    </div>
+                                    <div class="card-body">
+                                        <p><strong>Session ID:</strong> @selectedBlockingChain.BlockingSessionId</p>
+                                        <p><strong>Blocking Type:</strong> <span class="badge bg-danger">@selectedBlockingChain.BlockingType</span></p>
+                                        <p><strong>Resource:</strong> @selectedBlockingChain.Resource</p>
+                                        <p><strong>Duration:</strong> @selectedBlockingChain.DurationSeconds seconds</p>
+                                        <p><strong>Detected At:</strong> @selectedBlockingChain.DetectedAt.ToString("yyyy-MM-dd HH:mm:ss")</p>
+                                        @if (selectedBlockingChain.ResolvedAt.HasValue)
+                                        {
+                                            <p><strong>Resolved At:</strong> @selectedBlockingChain.ResolvedAt.Value.ToString("yyyy-MM-dd HH:mm:ss")</p>
+                                        }
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="card">
+                                    <div class="card-header bg-warning">
+                                        <h6 class="mb-0">⏸️ Blocked Session</h6>
+                                    </div>
+                                    <div class="card-body">
+                                        <p><strong>Session ID:</strong> @selectedBlockingChain.BlockedSessionId</p>
+                                        <p><strong>Status:</strong> <span class="badge bg-warning text-dark">BLOCKED</span></p>
+                                        <p><strong>Waiting Duration:</strong> @selectedBlockingChain.DurationSeconds seconds</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        @if (!string.IsNullOrEmpty(selectedBlockingChain.SqlText))
+                        {
+                            <h6>SQL Statement:</h6>
+                            <pre class="bg-light p-3" style="max-height: 400px; overflow-y: auto;"><code>@selectedBlockingChain.SqlText</code></pre>
+                        }
+                        else
+                        {
+                            <div class="alert alert-info">No SQL text available for this blocking chain.</div>
+                        }
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" @onclick="CloseBlockingDetails">Close</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+
     @if (showDeadlockDetails && selectedDeadlock != null)
     {
         <div class="modal show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.5);">
@@ -164,7 +229,7 @@ else
                     <div class="modal-body">
                         <p><strong>Timestamp:</strong> @selectedDeadlock.Timestamp.ToString("yyyy-MM-dd HH:mm:ss")</p>
                         <p><strong>Victim Session:</strong> <span class="badge bg-danger">@selectedDeadlock.VictimSessionId</span></p>
-                        
+
                         <h6>Processes:</h6>
                         @if (selectedDeadlock.processes != null && selectedDeadlock.processes.Any())
                         {
@@ -214,13 +279,15 @@ else
     private List<BlockingChainDto>? blockingChains;
     private List<DeadlockDto>? extendedEventsDeadlocks;
     private DeadlockDto? selectedDeadlock;
+    private BlockingChainDto? selectedBlockingChain;
     private bool showDeadlockDetails = false;
+    private bool showBlockingDetails = false;
     private int totalBlocking => blockingChains?.Count ?? 0;
     private int lockBlocking => blockingChains?.Count(b => b.BlockingType == "Lock") ?? 0;
     private int deadlockBlocking => blockingChains?.Count(b => b.BlockingType == "Deadlock") ?? 0;
     private int extendedEventsDeadlockCount => extendedEventsDeadlocks?.Count ?? 0;
-    private double avgDuration => blockingChains?.Any() == true 
-        ? blockingChains.Average(b => b.DurationSeconds) 
+    private double avgDuration => blockingChains?.Any() == true
+        ? blockingChains.Average(b => b.DurationSeconds)
         : 0;
     private List<BlockingChainDto> criticalBlocking => blockingChains?
         .Where(b => b.DurationSeconds > 60)
@@ -255,6 +322,18 @@ else
     private async Task RefreshData()
     {
         await LoadData();
+    }
+
+    private void ViewBlockingDetails(BlockingChainDto chain)
+    {
+        selectedBlockingChain = chain;
+        showBlockingDetails = true;
+    }
+
+    private void CloseBlockingDetails()
+    {
+        showBlockingDetails = false;
+        selectedBlockingChain = null;
     }
 
     private async Task ViewDeadlockDetails(string deadlockId)

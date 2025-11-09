@@ -210,11 +210,9 @@ else
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    @{
-                                        int rank = 1;
-                                    }
-                                    @foreach (var op in slowestOperations)
+                                    @foreach (var (op, index) in slowestOperations.Select((op, index) => (op, index)))
                                     {
+                                        var rank = index + 1;
                                         <tr>
                                             <td><strong>#@rank</strong></td>
                                             <td>@op.JobCaption</td>
@@ -226,7 +224,6 @@ else
                                             <td>@op.ServerName</td>
                                             <td>@op.Company</td>
                                         </tr>
-                                        rank++;
                                     }
                                 </tbody>
                             </table>
@@ -252,9 +249,7 @@ else
                     @if (durationTrends != null && durationTrends.Any())
                     {
                         <!-- Group by JobCaption to show each job's trend -->
-                        @{
-                            var groupedTrends = durationTrends.GroupBy(t => t.JobCaption).Take(10);
-                        }
+                        var groupedTrends = durationTrends.GroupBy(t => t.JobCaption).Take(10);
 
                         @foreach (var jobGroup in groupedTrends)
                         {
