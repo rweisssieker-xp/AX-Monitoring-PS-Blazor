@@ -1,0 +1,65 @@
+version: '3.8'
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: api-publish
+    container_name: axmonitoring-api
+    ports:
+      - "7001:8080"
+      - "7002:8081"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ASPNETCORE_URLS=http://+:8080
+      - ConnectionStrings__DefaultConnection=Server=sqlserver;Database=AX2012R3;User Id=sa;Password=YourPassword123!;TrustServerCertificate=true
+    volumes:
+      - ./logs:/app/logs
+    networks:
+      - axmonitoring-network
+    depends_on:
+      - sqlserver
+    restart: unless-stopped
+
+  blazor:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: blazor-publish
+    container_name: axmonitoring-blazor
+    ports:
+      - "7000:8080"
+      - "7003:8081"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ASPNETCORE_URLS=http://+:8080
+      - ApiSettings__BaseUrl=http://api:8080
+    networks:
+      - axmonitoring-network
+    depends_on:
+      - api
+    restart: unless-stopped
+
+  sqlserver:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    container_name: axmonitoring-sqlserver
+    environment:
+      - ACCEPT_EULA=Y
+      - SA_PASSWORD=YourPassword123!
+      - MSSQL_PID=Developer
+    ports:
+      - "1433:1433"
+    volumes:
+      - sqlserver-data:/var/opt/mssql
+    networks:
+      - axmonitoring-network
+    restart: unless-stopped
+
+networks:
+  axmonitoring-network:
+    driver: bridge
+
+volumes:
+  sqlserver-data:
+

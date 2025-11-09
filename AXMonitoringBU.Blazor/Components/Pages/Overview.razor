@@ -1,157 +1,161 @@
 @page "/"
 @page "/overview"
+@using System.Linq
+@using System.Threading
+@using Microsoft.AspNetCore.Components
 @using AXMonitoringBU.Blazor.Services
-@inject IMetricsService MetricsService
-@inject ISignalRService SignalRService
-@inject IAlertService AlertService
+@using AXMonitoringBU.Blazor.Models
+@inject AXMonitoringBU.Blazor.Services.IMetricsService MetricsService
+@inject AXMonitoringBU.Blazor.Services.ISignalRService SignalRService
+@inject AXMonitoringBU.Blazor.Services.IAlertService AlertService
+@inject AXMonitoringBU.Blazor.Services.ISessionService SessionService
+@inject AXMonitoringBU.Blazor.Services.IBatchJobService BatchJobService
+@inject AXMonitoringBU.Blazor.Services.IDashboardService DashboardService
+@inject AXMonitoringBU.Blazor.Services.IPreferencesService PreferencesService
+@inject Microsoft.AspNetCore.Components.NavigationManager NavigationManager
 @implements IAsyncDisposable
 
 <PageTitle>Overview - AX Monitoring BU</PageTitle>
 
-<h3>System Overview</h3>
+<div class="d-flex flex-column flex-lg-row align-items-lg-end gap-3 mb-3">
+    <div class="flex-grow-1">
+        <SearchBox OnSearchResultSelected="HandleSearchResult" />
+    </div>
+    <div>
+        <label class="form-label mb-1">Refresh Interval</label>
+        <select class="form-select" value="@refreshIntervalSeconds" @onchange="OnRefreshIntervalChanged">
+            <option value="0">Off</option>
+            <option value="15">15s</option>
+            <option value="30">30s</option>
+            <option value="60">60s</option>
+        </select>
+    </div>
+    <div class="d-flex gap-2">
+        <button class="btn btn-outline-secondary" @onclick="ToggleEditMode">
+            @(isEditMode ? "Done Customizing" : "Customize Dashboard")
+        </button>
+        <button class="btn btn-outline-primary" @onclick="ReloadData" disabled="@isLoading">Refresh now</button>
+    </div>
+</div>
+
+<FilterPanel OnFiltersChanged="HandleFiltersChanged" />
+
+@if (isEditMode)
+{
+    <div class="card mb-3">
+        <div class="card-body">
+            <h5 class="card-title">Dashboard Layout</h5>
+            <p class="text-muted">Add, remove or reorder widgets. Changes are saved to your preferences.</p>
+            <div class="d-flex flex-wrap gap-2 mb-3">
+                @foreach (var widget in GetAvailableWidgetsToAdd())
+                {
+                    <button class="btn btn-sm btn-outline-primary" @onclick="() => AddWidget(widget)">
+                        <span class="me-1">➕</span>@widget.Title
+                    </button>
+                }
+                @if (!GetAvailableWidgetsToAdd().Any())
+                {
+                    <span class="text-muted">All widgets are in use.</span>
+                }
+            </div>
+            <button class="btn btn-primary me-2" @onclick="SaveLayoutAsync" disabled="@savingLayout">
+                @if (savingLayout)
+                {
+                    <span class="spinner-border spinner-border-sm me-1"></span>
+                }
+                Save Layout
+            </button>
+            <button class="btn btn-outline-secondary" @onclick="CancelEditMode">Cancel</button>
+        </div>
+    </div>
+}
+
 @if (isSignalRConnected)
 {
-    <span class="badge bg-success">🟢 Real-time Updates Active</span>
+    <span class="badge bg-success mb-2">🟢 Real-time Updates Active</span>
 }
 else
 {
-    <span class="badge bg-secondary">⚪ Real-time Updates Inactive</span>
+    <span class="badge bg-secondary mb-2">⚪ Real-time Updates Inactive</span>
 }
 
 @if (isLoading)
 {
     <p>Loading...</p>
 }
+else if (dashboardLayout.Widgets.Count == 0)
+{
+    <div class="alert alert-info">No widgets selected. Enable customization to add widgets.</div>
+}
 else
 {
-    <div class="row mb-4">
-        <div class="col-md-3">
-            <div class="card">
-                <div class="card-body">
-                    <h5 class="card-title">Batch Backlog</h5>
-                    <h2 class="text-primary">@(kpiData?.batch_backlog ?? 0)</h2>
-                </div>
-            </div>
-        </div>
-        <div class="col-md-3">
-            <div class="card">
-                <div class="card-body">
-                    <h5 class="card-title">Error Rate</h5>
-                    <h2 class="@(errorRate > 5 ? "text-danger" : "text-success")">@errorRate.ToString("F1")%</h2>
-                </div>
-            </div>
-        </div>
-        <div class="col-md-3">
-            <div class="card">
-                <div class="card-body">
-                    <h5 class="card-title">Active Sessions</h5>
-                    <h2 class="text-success">@(kpiData?.active_sessions ?? 0)</h2>
-                </div>
-            </div>
-        </div>
-        <div class="col-md-3">
-            <div class="card">
-                <div class="card-body">
-                    <h5 class="card-title">Blocking Chains</h5>
-                    <h2 class="@(blockingChains > 0 ? "text-warning" : "text-success")">@blockingChains</h2>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <div class="row mb-4">
-        <div class="col-12">
-            <h4>System Status</h4>
-            <div class="row">
-                <div class="col-md-3">
-                    <div class="card">
-                        <div class="card-body text-center">
-                            <h6>CPU Usage</h6>
-                            <h3 class="@(sqlHealth?.cpu_usage > 80 ? "text-danger" : "text-success")">@sqlHealth?.cpu_usage.ToString("F1")%</h3>
-                        </div>
-                    </div>
-                </div>
-                <div class="col-md-3">
-                    <div class="card">
-                        <div class="card-body text-center">
-                            <h6>Memory Usage</h6>
-                            <h3 class="@(sqlHealth?.memory_usage > 85 ? "text-danger" : "text-success")">@sqlHealth?.memory_usage.ToString("F1")%</h3>
-                        </div>
-                    </div>
-                </div>
-                <div class="col-md-3">
-                    <div class="card">
-                        <div class="card-body text-center">
-                            <h6>Active Connections</h6>
-                            <h3 class="text-info">@sqlHealth?.active_connections</h3>
-                        </div>
-                    </div>
-                </div>
-                <div class="col-md-3">
-                    <div class="card">
-                        <div class="card-body text-center">
-                            <h6>Longest Query</h6>
-                            <h3 class="text-secondary">@sqlHealth?.longest_running_query min</h3>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <div class="row">
-        <div class="col-12">
-            <h4>Recent Alerts</h4>
-            @if (recentAlerts != null && recentAlerts.Any())
-            {
-                <div class="list-group">
-                    @foreach (var alert in recentAlerts)
-                    {
-                        <div class="list-group-item">
-                            <div class="d-flex w-100 justify-content-between">
-                                <h5 class="mb-1">@alert.Type</h5>
-                                <small>@alert.Timestamp.ToString("HH:mm:ss")</small>
+    <div class="row g-3">
+        @foreach (var widget in dashboardLayout.Widgets)
+        {
+            <div class="col-12 col-md-@GetBootstrapWidth(widget.Width)">
+                <div class="dashboard-widget @(isEditMode ? "dashboard-widget-edit" : string.Empty)">
+                    <div class="dashboard-widget-header">
+                        <h6 class="dashboard-widget-title">@widget.Title</h6>
+                        @if (isEditMode)
+                        {
+                            <div class="dashboard-widget-actions">
+                                <button type="button" title="Move Up" @onclick="() => MoveWidgetUp(widget)">⬆️</button>
+                                <button type="button" title="Move Down" @onclick="() => MoveWidgetDown(widget)">⬇️</button>
+                                <button type="button" title="Remove" @onclick="() => RemoveWidget(widget)">🗑️</button>
                             </div>
-                            <p class="mb-1">@alert.Message</p>
-                            <small class="badge bg-@(alert.Severity.ToLower() == "critical" ? "danger" : alert.Severity.ToLower() == "warning" ? "warning" : "info")">@alert.Severity</small>
-                        </div>
-                    }
+                        }
+                    </div>
+                    @RenderWidgetContent(widget)
                 </div>
-            }
-            else
-            {
-                <div class="alert alert-success">No active alerts</div>
-            }
-        </div>
+            </div>
+        }
     </div>
 }
 
 @code {
     private bool isLoading = true;
     private bool isSignalRConnected = false;
+    private bool isEditMode;
+    private bool savingLayout;
+    private int refreshIntervalSeconds = 30;
+
     private KpiData? kpiData;
     private SqlHealthData? sqlHealth;
-    private List<AlertDto>? recentAlerts;
-    private double errorRate => kpiData?.error_rate ?? 0;
-    private int blockingChains => kpiData?.blocking_chains ?? 0;
+    private List<AlertDto> allAlerts = new();
+    private List<AlertDto> filteredAlerts = new();
+    private List<SessionDto> activeSessions = new();
+    private List<BatchJobDto> runningBatchJobs = new();
+    private FilterOptions currentFilters = new();
+
+    private DashboardLayout dashboardLayout = new();
+    private DashboardLayout? originalLayout;
+    private List<DashboardWidget> availableWidgets = new();
+
+    private PeriodicTimer? refreshTimer;
+    private CancellationTokenSource? refreshCancellationTokenSource;
 
     protected override async Task OnInitializedAsync()
     {
+        availableWidgets = await DashboardService.GetAvailableWidgetsAsync();
+
         try
         {
+            await LoadDashboardAsync();
+            await LoadPreferencesAsync();
             await LoadData();
         }
         catch (Exception ex)
         {
             Console.WriteLine($"Error loading initial data: {ex.Message}");
-            // Set defaults to prevent crash
             kpiData = null;
             sqlHealth = null;
-            recentAlerts = new List<AlertDto>();
+            allAlerts = new();
+            filteredAlerts = new();
+            activeSessions = new();
+            runningBatchJobs = new();
             isLoading = false;
         }
-        
-        // Don't block on SignalR - let it initialize in background
+
         _ = Task.Run(async () =>
         {
             try
@@ -163,6 +167,38 @@ else
                 Console.WriteLine($"SignalR initialization failed: {ex.Message}");
             }
         });
+    }
+
+    private async Task LoadDashboardAsync()
+    {
+        dashboardLayout = await DashboardService.GetDashboardLayoutAsync("overview");
+        if (dashboardLayout.Widgets == null || dashboardLayout.Widgets.Count == 0)
+        {
+            dashboardLayout = new DashboardLayout
+            {
+                Name = "overview",
+                Widgets = (await DashboardService.GetAvailableWidgetsAsync())
+                    .Where(w => w.Title is "Batch Backlog" or "Error Rate" or "Active Sessions" or "Blocking Chains" or "CPU Usage" or "Memory Usage")
+                    .Select(CloneWidget)
+                    .ToList(),
+                CreatedAt = DateTime.UtcNow
+            };
+        }
+    }
+
+    private async Task LoadPreferencesAsync()
+    {
+        try
+        {
+            refreshIntervalSeconds = await PreferencesService.GetRefreshIntervalAsync();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading preferences: {ex.Message}");
+            refreshIntervalSeconds = 30;
+        }
+
+        RestartRefreshTimer();
     }
 
     private async Task InitializeSignalR()
@@ -183,6 +219,49 @@ else
         }
     }
 
+    private async Task LoadData()
+    {
+        isLoading = true;
+        try
+        {
+            var metrics = await MetricsService.GetCurrentMetricsAsync();
+            if (metrics != null)
+            {
+                kpiData = metrics.kpis;
+                sqlHealth = metrics.sql_health;
+            }
+
+            var alertsResponse = await AlertService.GetAlertsAsync();
+            if (alertsResponse?.alerts != null)
+            {
+                allAlerts = alertsResponse.alerts
+                    .OrderByDescending(a => a.Timestamp)
+                    .Take(20)
+                    .ToList();
+                ApplyAlertFilters();
+            }
+
+            var sessionsResponse = await SessionService.GetSessionsAsync("Active");
+            activeSessions = sessionsResponse?.sessions?.Take(10).ToList() ?? new List<SessionDto>();
+
+            var batchResponse = await BatchJobService.GetBatchJobsAsync("Running");
+            runningBatchJobs = batchResponse?.batch_jobs?.Take(10).ToList() ?? new List<BatchJobDto>();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading data: {ex.Message}");
+            kpiData = null;
+            sqlHealth = null;
+            allAlerts = new();
+            filteredAlerts = new();
+        }
+        finally
+        {
+            isLoading = false;
+            StateHasChanged();
+        }
+    }
+
     private void HandleKpiUpdate(KpiUpdateData data)
     {
         _ = InvokeAsync(() =>
@@ -191,25 +270,23 @@ else
             {
                 if (data.kpis != null)
                 {
-                    // Convert dictionary to KpiData
                     kpiData = new KpiData
                     {
                         batch_backlog = data.kpis.TryGetValue("batch_backlog", out var backlog) ? Convert.ToInt32(backlog) : 0,
-                        error_rate = data.kpis.TryGetValue("error_rate", out var errorRate) ? Convert.ToDouble(errorRate) : 0,
+                        error_rate = data.kpis.TryGetValue("error_rate", out var er) ? Convert.ToDouble(er) : 0,
                         active_sessions = data.kpis.TryGetValue("active_sessions", out var sessions) ? Convert.ToInt32(sessions) : 0,
                         blocking_chains = data.kpis.TryGetValue("blocking_chains", out var blocking) ? Convert.ToInt32(blocking) : 0
                     };
                 }
                 if (data.sql_health != null)
                 {
-                    // Convert dictionary to SqlHealthData
                     sqlHealth = new SqlHealthData
                     {
                         cpu_usage = data.sql_health.TryGetValue("cpu_usage", out var cpu) ? Convert.ToDouble(cpu) : 0,
-                        memory_usage = data.sql_health.TryGetValue("memory_usage", out var memory) ? Convert.ToDouble(memory) : 0,
+                        memory_usage = data.sql_health.TryGetValue("memory_usage", out var mem) ? Convert.ToDouble(mem) : 0,
                         io_wait = data.sql_health.TryGetValue("io_wait", out var io) ? Convert.ToDouble(io) : 0,
-                        tempdb_usage = data.sql_health.TryGetValue("tempdb_usage", out var tempdb) ? Convert.ToDouble(tempdb) : 0,
-                        active_connections = data.sql_health.TryGetValue("active_connections", out var connections) ? Convert.ToInt32(connections) : 0,
+                        tempdb_usage = data.sql_health.TryGetValue("tempdb_usage", out var temp) ? Convert.ToDouble(temp) : 0,
+                        active_connections = data.sql_health.TryGetValue("active_connections", out var conn) ? Convert.ToInt32(conn) : 0,
                         longest_running_query = data.sql_health.TryGetValue("longest_running_query", out var query) ? Convert.ToInt32(query) : 0
                     };
                 }
@@ -230,13 +307,21 @@ else
             {
                 if (data.alerts != null)
                 {
-                    recentAlerts = data.alerts.Select(a => new AlertDto
-                    {
-                        Type = a.Type,
-                        Severity = a.Severity,
-                        Message = a.Message,
-                        Timestamp = a.Timestamp
-                    }).ToList();
+                    allAlerts = data.alerts
+                        .Select(a => new AlertDto
+                        {
+                            Id = a.Id,
+                            AlertId = a.AlertId,
+                            Type = a.Type,
+                            Severity = a.Severity,
+                            Message = a.Message,
+                            Status = a.Status,
+                            Timestamp = a.Timestamp
+                        })
+                        .OrderByDescending(a => a.Timestamp)
+                        .Take(20)
+                        .ToList();
+                    ApplyAlertFilters();
                 }
                 StateHasChanged();
             }
@@ -249,50 +334,322 @@ else
 
     private void HandleSystemStatusUpdate(SystemStatusData data)
     {
-        // Handle system status updates if needed
+        // Future hook for status widgets
     }
 
-    private async Task LoadData()
+    private async Task ReloadData()
     {
-        isLoading = true;
+        await LoadData();
+    }
+
+    private void ToggleEditMode()
+    {
+        if (!isEditMode)
+        {
+            originalLayout = CloneLayout(dashboardLayout);
+        }
+        isEditMode = !isEditMode;
+    }
+
+    private void CancelEditMode()
+    {
+        if (originalLayout != null)
+        {
+            dashboardLayout = CloneLayout(originalLayout);
+        }
+        isEditMode = false;
+    }
+
+    private async Task SaveLayoutAsync()
+    {
+        savingLayout = true;
         try
         {
-            var metrics = await MetricsService.GetCurrentMetricsAsync();
-            if (metrics != null)
-            {
-                kpiData = metrics.kpis;
-                sqlHealth = metrics.sql_health;
-            }
-
-            // Load alerts from API
-            var alertsResponse = await AlertService.GetAlertsAsync("Active");
-            if (alertsResponse?.alerts != null)
-            {
-                recentAlerts = alertsResponse.alerts.Take(5).Select(a => new AlertDto
-                {
-                    Type = a.Type,
-                    Severity = a.Severity,
-                    Message = a.Message,
-                    Timestamp = a.Timestamp
-                }).ToList();
-            }
+            dashboardLayout.UpdatedAt = DateTime.UtcNow;
+            await DashboardService.SaveDashboardLayoutAsync("overview", dashboardLayout);
+            isEditMode = false;
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Error loading data: {ex.Message}");
-            // Don't crash - just show empty state
-            kpiData = null;
-            sqlHealth = null;
-            recentAlerts = new List<AlertDto>();
+            Console.WriteLine($"Error saving dashboard layout: {ex.Message}");
         }
         finally
         {
-            isLoading = false;
+            savingLayout = false;
+        }
+    }
+
+    private IEnumerable<DashboardWidget> GetAvailableWidgetsToAdd()
+    {
+        var usedTitles = dashboardLayout.Widgets.Select(w => w.Title).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        return availableWidgets.Where(w => !usedTitles.Contains(w.Title));
+    }
+
+    private void AddWidget(DashboardWidget template)
+    {
+        dashboardLayout.Widgets.Add(CloneWidget(template));
+    }
+
+    private void RemoveWidget(DashboardWidget widget)
+    {
+        dashboardLayout.Widgets.Remove(widget);
+    }
+
+    private void MoveWidgetUp(DashboardWidget widget)
+    {
+        var index = dashboardLayout.Widgets.IndexOf(widget);
+        if (index > 0)
+        {
+            dashboardLayout.Widgets.RemoveAt(index);
+            dashboardLayout.Widgets.Insert(index - 1, widget);
+        }
+    }
+
+    private void MoveWidgetDown(DashboardWidget widget)
+    {
+        var index = dashboardLayout.Widgets.IndexOf(widget);
+        if (index >= 0 && index < dashboardLayout.Widgets.Count - 1)
+        {
+            dashboardLayout.Widgets.RemoveAt(index);
+            dashboardLayout.Widgets.Insert(index + 1, widget);
+        }
+    }
+
+    private void HandleFiltersChanged(FilterOptions options)
+    {
+        currentFilters = options;
+        ApplyAlertFilters();
+    }
+
+    private void ApplyAlertFilters()
+    {
+        var query = allAlerts.AsEnumerable();
+
+        if (!string.IsNullOrWhiteSpace(currentFilters.Status) && !string.Equals(currentFilters.Status, "All", StringComparison.OrdinalIgnoreCase))
+        {
+            query = query.Where(a => string.Equals(a.Status, currentFilters.Status, StringComparison.OrdinalIgnoreCase));
+        }
+
+        if (currentFilters.DateFrom.HasValue)
+        {
+            query = query.Where(a => a.Timestamp >= currentFilters.DateFrom.Value);
+        }
+
+        if (currentFilters.DateTo.HasValue)
+        {
+            query = query.Where(a => a.Timestamp <= currentFilters.DateTo.Value);
+        }
+
+        if (!string.IsNullOrWhiteSpace(currentFilters.SearchText))
+        {
+            var term = currentFilters.SearchText.Trim();
+            query = query.Where(a => a.Type.Contains(term, StringComparison.OrdinalIgnoreCase) || a.Message.Contains(term, StringComparison.OrdinalIgnoreCase));
+        }
+
+        filteredAlerts = query.Take(10).ToList();
+        StateHasChanged();
+    }
+
+    private void HandleSearchResult(SearchResult result)
+    {
+        if (!string.IsNullOrWhiteSpace(result.Url))
+        {
+            NavigationManager.NavigateTo(result.Url);
+        }
+    }
+
+    private void OnRefreshIntervalChanged(ChangeEventArgs args)
+    {
+        if (int.TryParse(args.Value?.ToString(), out var value))
+        {
+            refreshIntervalSeconds = value;
+            _ = PreferencesService.SetRefreshIntervalAsync(value);
+            RestartRefreshTimer();
+        }
+    }
+
+    private void RestartRefreshTimer()
+    {
+        refreshCancellationTokenSource?.Cancel();
+        refreshTimer?.Dispose();
+
+        if (refreshIntervalSeconds <= 0)
+        {
+            return;
+        }
+
+        refreshCancellationTokenSource = new CancellationTokenSource();
+        refreshTimer = new PeriodicTimer(TimeSpan.FromSeconds(refreshIntervalSeconds));
+
+        _ = Task.Run(async () =>
+        {
+            try
+            {
+                while (await refreshTimer.WaitForNextTickAsync(refreshCancellationTokenSource.Token))
+                {
+                    await LoadData();
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                // Expected on cancellation
+            }
+        });
+    }
+
+    private string GetBootstrapWidth(int width) => Math.Clamp(width, 1, 12).ToString();
+
+    private RenderFragment RenderWidgetContent(DashboardWidget widget) => builder =>
+    {
+        switch (widget.Type)
+        {
+            case "metric":
+                var (value, subtitle, stateClass) = GetMetricDetails(widget.Title);
+                builder.AddMarkupContent(0, $"<div class='card'><div class='card-body text-center'><h3 class='{stateClass}'>{value}</h3><p class='text-muted mb-0'>{subtitle}</p></div></div>");
+                break;
+            case "chart":
+                builder.OpenElement(1, "div");
+                builder.AddAttribute(2, "class", "card");
+                builder.OpenElement(3, "div");
+                builder.AddAttribute(4, "class", "card-body text-center");
+                builder.OpenElement(5, "h6");
+                builder.AddContent(6, widget.Title);
+                builder.CloseElement();
+                builder.OpenElement(7, "div");
+                builder.AddAttribute(8, "class", "display-6");
+                builder.AddContent(9, GetChartValue(widget.Title));
+                builder.CloseElement();
+                builder.OpenElement(10, "p");
+                builder.AddAttribute(11, "class", "text-muted mb-0");
+                builder.AddContent(12, "Trend data coming soon");
+                builder.CloseElement();
+                builder.CloseElement();
+                builder.CloseElement();
+                break;
+            case "table" when widget.Title == "Recent Alerts":
+                builder.OpenElement(13, "div");
+                builder.AddAttribute(14, "class", "table-responsive");
+                builder.AddMarkupContent(15, RenderAlertsTable());
+                builder.CloseElement();
+                break;
+            case "table" when widget.Title == "Active Sessions Table":
+                builder.OpenElement(16, "div");
+                builder.AddAttribute(17, "class", "table-responsive");
+                builder.AddMarkupContent(18, RenderSessionsTable());
+                builder.CloseElement();
+                break;
+            default:
+                builder.AddMarkupContent(19, "<div class='text-muted'>Widget rendering not implemented.</div>");
+                break;
+        }
+    };
+
+    private (string Value, string Subtitle, string StateClass) GetMetricDetails(string title) => title switch
+    {
+        "Batch Backlog" => ($"{kpiData?.batch_backlog ?? 0:N0}", "Jobs waiting", kpiData?.batch_backlog > 50 ? "text-danger" : "text-success"),
+        "Error Rate" => ($"{kpiData?.error_rate ?? 0:F1}%", "Last 24h", kpiData?.error_rate > 5 ? "text-danger" : "text-success"),
+        "Active Sessions" => ($"{kpiData?.active_sessions ?? 0:N0}", "Current", "text-success"),
+        "Blocking Chains" => ($"{kpiData?.blocking_chains ?? 0:N0}", "Active chains", (kpiData?.blocking_chains ?? 0) > 0 ? "text-warning" : "text-success"),
+        "SQL Active Connections" => ($"{sqlHealth?.active_connections ?? 0:N0}", "Database connections", "text-info"),
+        "SQL Longest Query" => ($"{sqlHealth?.longest_running_query ?? 0} min", "Longest running", "text-secondary"),
+        _ => ("N/A", "No data", "text-muted")
+    };
+
+    private string GetChartValue(string title) => title switch
+    {
+        "CPU Usage" => $"{sqlHealth?.cpu_usage ?? 0:F1}%",
+        "Memory Usage" => $"{sqlHealth?.memory_usage ?? 0:F1}%",
+        _ => "N/A"
+    };
+
+    private string RenderAlertsTable()
+    {
+        if (!filteredAlerts.Any())
+        {
+            return "<div class='alert alert-success mb-0'>No alerts for the selected filters.</div>";
+        }
+
+        var builder = new System.Text.StringBuilder();
+        foreach (var alert in filteredAlerts)
+        {
+            var severityLower = alert.Severity?.ToLowerInvariant() ?? string.Empty;
+            var severityClass = severityLower switch
+            {
+                "critical" => "danger",
+                "warning" => "warning",
+                _ => "info"
+            };
+
+            builder.Append("<tr>");
+            builder.AppendFormat("<td>{0:HH:mm:ss}</td>", alert.Timestamp);
+            builder.AppendFormat("<td>{0}</td>", System.Net.WebUtility.HtmlEncode(alert.Type));
+            builder.AppendFormat("<td><span class='badge bg-{0}'>{1}</span></td>", severityClass, System.Net.WebUtility.HtmlEncode(alert.Severity));
+            builder.AppendFormat("<td>{0}</td>", System.Net.WebUtility.HtmlEncode(alert.Status));
+            builder.AppendFormat("<td>{0}</td>", System.Net.WebUtility.HtmlEncode(alert.Message));
+            builder.Append("</tr>");
+        }
+
+        return $"<table class='table table-sm align-middle mb-0'><thead><tr><th>Time</th><th>Type</th><th>Severity</th><th>Status</th><th>Message</th></tr></thead><tbody>{builder}</tbody></table>";
+    }
+
+    private string RenderSessionsTable()
+    {
+        if (!activeSessions.Any())
+        {
+            return "<div class='alert alert-info mb-0'>No active sessions detected.</div>";
+        }
+
+        var builder = new System.Text.StringBuilder();
+        foreach (var session in activeSessions)
+        {
+            builder.Append("<tr>");
+            builder.AppendFormat("<td>{0}</td>", System.Net.WebUtility.HtmlEncode(session.SessionId));
+            builder.AppendFormat("<td>{0}</td>", System.Net.WebUtility.HtmlEncode(session.UserId));
+            builder.AppendFormat("<td>{0}</td>", System.Net.WebUtility.HtmlEncode(session.AosServer));
+            builder.AppendFormat("<td>{0}</td>", session.LastActivity?.ToLocalTime().ToString("HH:mm:ss") ?? "n/a");
+            builder.Append("</tr>");
+        }
+
+        return $"<table class='table table-sm align-middle mb-0'><thead><tr><th>Session</th><th>User</th><th>AOS</th><th>Last Activity</th></tr></thead><tbody>{builder}</tbody></table>";
+    }
+
+    private static DashboardLayout CloneLayout(DashboardLayout source) => new()
+    {
+        Name = source.Name,
+        Widgets = source.Widgets.Select(CloneWidget).ToList(),
+        CreatedAt = source.CreatedAt,
+        UpdatedAt = source.UpdatedAt
+    };
+
+    private static DashboardWidget CloneWidget(DashboardWidget widget) => new()
+    {
+        Id = Guid.NewGuid().ToString(),
+        Type = widget.Type,
+        Title = widget.Title,
+        Column = widget.Column,
+        Row = widget.Row,
+        Width = widget.Width,
+        Height = widget.Height,
+        Config = widget.Config.ToDictionary(kvp => kvp.Key, kvp => kvp.Value)
+    };
+
+    private void DisposeRefreshTimer()
+    {
+        try
+        {
+            refreshCancellationTokenSource?.Cancel();
+            refreshTimer?.Dispose();
+        }
+        catch
+        {
+            // Ignore disposal exceptions
         }
     }
 
     public async ValueTask DisposeAsync()
     {
+        DisposeRefreshTimer();
+
         if (SignalRService != null)
         {
             SignalRService.OnKpiUpdated -= HandleKpiUpdate;
@@ -300,14 +657,6 @@ else
             SignalRService.OnSystemStatusUpdated -= HandleSystemStatusUpdate;
             await SignalRService.StopAsync();
         }
-    }
-
-    public class AlertDto
-    {
-        public string Type { get; set; } = string.Empty;
-        public string Severity { get; set; } = string.Empty;
-        public string Message { get; set; } = string.Empty;
-        public DateTime Timestamp { get; set; }
     }
 }
 

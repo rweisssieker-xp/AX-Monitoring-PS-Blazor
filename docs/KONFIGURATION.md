@@ -140,6 +140,58 @@ Für Production mit Environment Variables:
 
 - **`env.example`** - Vorlage für Environment Variables
 
+## Environment Variables Mapping
+
+Die folgende Tabelle zeigt das Mapping zwischen Environment Variables und `appsettings.json` Pfaden:
+
+| Environment Variable | appsettings.json Path | Beschreibung |
+|---------------------|----------------------|--------------|
+| `AX_DB_SERVER` | `Database:Server` | SQL Server Hostname |
+| `AX_DB_NAME` | `Database:Name` | Datenbankname |
+| `AX_DB_USER` | `Database:User` | Datenbankbenutzer |
+| `AX_DB_PASSWORD` | `Database:Password` | Datenbankpasswort |
+| `AX_USE_WINDOWS_AUTH` | `Database:UseWindowsAuthentication` | Windows Authentication verwenden |
+| `DB_DRIVER` | `Database:Driver` | ODBC Driver Name |
+| `DB_CONNECTION_STRING` | `ConnectionStrings:DefaultConnection` | Vollständiger Connection String |
+| `MONITORING_DB_CONNECTION_STRING` | `MonitoringDatabase:ConnectionString` | Monitoring DB Connection String |
+| `AOS_SERVER_1` | `AOS:Servers[0]` | Erster AOS Server |
+| `AOS_SERVER_2` | `AOS:Servers[1]` | Zweiter AOS Server |
+| `SMTP_SERVER` | `Alerts:Email:SmtpServer` | SMTP Server Hostname |
+| `SMTP_PORT` | `Alerts:Email:SmtpPort` | SMTP Port |
+| `SMTP_USER` | `Alerts:Email:SmtpUser` | SMTP Benutzer |
+| `SMTP_PASSWORD` | `Alerts:Email:SmtpPassword` | SMTP Passwort |
+| `EMAIL_FROM` | `Alerts:Email:FromAddress` | Absender E-Mail |
+| `TEAMS_CRITICAL_WEBHOOK_URL` | `Alerts:Teams:CriticalWebhookUrl` | Teams Critical Webhook |
+| `TEAMS_WARNING_WEBHOOK_URL` | `Alerts:Teams:WarningWebhookUrl` | Teams Warning Webhook |
+| `TEAMS_INFO_WEBHOOK_URL` | `Alerts:Teams:InfoWebhookUrl` | Teams Info Webhook |
+| `SECRET_KEY` | `Security:SecretKey` | Secret Key für Verschlüsselung |
+| `JWT_SECRET` | `Security:JwtSecret` | JWT Secret Key |
+| `OPENAI_API_KEY` | `OpenAI:ApiKey` | OpenAI API Key |
+| `OPENAI_ANALYSIS_ENABLED` | `OpenAI:AnalysisEnabled` | OpenAI Analysis aktivieren |
+| `TICKETING_SYSTEM` | `Integrations:Ticketing:DefaultSystem` | Standard Ticketing System |
+| `SERVICENOW_URL` | `Integrations:Ticketing:ServiceNow:BaseUrl` | ServiceNow URL |
+| `JIRA_URL` | `Integrations:Ticketing:Jira:BaseUrl` | Jira URL |
+| `AZURE_DEVOPS_URL` | `Integrations:Ticketing:AzureDevOps:BaseUrl` | Azure DevOps URL |
+| `CORS_ALLOWED_ORIGIN_1` | `Cors:AllowedOrigins[0]` | Erste erlaubte CORS Origin |
+| `CORS_ALLOWED_ORIGIN_2` | `Cors:AllowedOrigins[1]` | Zweite erlaubte CORS Origin |
+
+### Verwendung in Production
+
+In Production sollten Sie Environment Variables verwenden. Die `appsettings.json` Datei verwendet Platzhalter im Format `${VARIABLE_NAME}`:
+
+```json
+{
+  "Database": {
+    "Server": "${AX_DB_SERVER}",
+    "Name": "${AX_DB_NAME}",
+    "User": "${AX_DB_USER}",
+    "Password": "${AX_DB_PASSWORD}"
+  }
+}
+```
+
+Diese Platzhalter werden zur Laufzeit durch die entsprechenden Environment Variables ersetzt.
+
 ## Schnellstart für Development
 
 1. Öffnen Sie `AXMonitoringBU.Api/appsettings.Development.json`

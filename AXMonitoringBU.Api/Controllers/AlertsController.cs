@@ -4,7 +4,11 @@ using AXMonitoringBU.Api.Services;
 
 namespace AXMonitoringBU.Api.Controllers;
 
+/// <summary>
+/// Controller for managing alerts and notifications
+/// </summary>
 [ApiController]
+[ApiVersion("1.0")]
 [Route("api/v1/alerts")]
 public class AlertsController : ControllerBase
 {
@@ -22,6 +26,11 @@ public class AlertsController : ControllerBase
         _logger = logger;
     }
 
+    /// <summary>
+    /// Retrieves all alerts, optionally filtered by status
+    /// </summary>
+    /// <param name="status">Optional status filter (Active, Resolved, Acknowledged)</param>
+    /// <returns>List of alerts</returns>
     [HttpGet]
     public async Task<IActionResult> GetAlerts([FromQuery] string? status = null)
     {
@@ -54,6 +63,11 @@ public class AlertsController : ControllerBase
         }
     }
 
+    /// <summary>
+    /// Creates a new alert
+    /// </summary>
+    /// <param name="dto">Alert creation data</param>
+    /// <returns>Created alert</returns>
     [HttpPost]
     public async Task<IActionResult> CreateAlert([FromBody] CreateAlertDto dto)
     {
@@ -109,6 +123,28 @@ public class AlertsController : ControllerBase
         }
 
         return Ok(new { message = $"Alert {id} updated successfully" });
+    }
+
+    /// <summary>
+    /// Acknowledge an alert
+    /// </summary>
+    [HttpPost("{id}/acknowledge")]
+    public async Task<IActionResult> AcknowledgeAlert(int id)
+    {
+        try
+        {
+            var success = await _alertService.AcknowledgeAlertAsync(id, User.Identity?.Name ?? "Unknown");
+            if (!success)
+            {
+                return NotFound();
+            }
+            return Ok(new { message = $"Alert {id} acknowledged successfully" });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error acknowledging alert {AlertId}", id);
+            return StatusCode(500, new { error = "Failed to acknowledge alert" });
+        }
     }
 
     [HttpDelete("{id}")]

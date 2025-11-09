@@ -1,0 +1,358 @@
+@page "/error-analytics"
+@using AXMonitoringBU.Blazor.Services
+@using AXMonitoringBU.Blazor.Models
+@inject IErrorAnalyticsService ErrorAnalyticsService
+
+<PageTitle>Error Analytics - AX Monitoring BU</PageTitle>
+
+<h3>🔴 Error Analytics</h3>
+
+<div class="mb-3">
+    <div class="row">
+        <div class="col-md-4">
+            <label>Start Date:</label>
+            <input type="date" class="form-control" @bind="startDate" />
+        </div>
+        <div class="col-md-4">
+            <label>End Date:</label>
+            <input type="date" class="form-control" @bind="endDate" />
+        </div>
+        <div class="col-md-4">
+            <label>&nbsp;</label>
+            <button class="btn btn-primary d-block w-100" @onclick="RefreshData">🔄 Refresh Data</button>
+        </div>
+    </div>
+</div>
+
+@if (isLoading)
+{
+    <div class="text-center my-5">
+        <div class="spinner-border text-danger" role="status">
+            <span class="visually-hidden">Loading...</span>
+        </div>
+        <p class="mt-2">Loading error analytics...</p>
+    </div>
+}
+else
+{
+    <!-- Summary Cards -->
+    @if (summary != null)
+    {
+        <div class="row mb-4">
+            <div class="col-md-3">
+                <div class="card bg-danger text-white">
+                    <div class="card-body text-center">
+                        <h6>Total Errors</h6>
+                        <h2>@summary.TotalErrors</h2>
+                        <small>Error Rate: @summary.OverallErrorRate%</small>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card bg-warning text-dark">
+                    <div class="card-body text-center">
+                        <h6>High Priority Issues</h6>
+                        <h2>@summary.HighPriorityIssues</h2>
+                        <small>Requires attention</small>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card bg-info text-white">
+                    <div class="card-body text-center">
+                        <h6>Avg MTTR</h6>
+                        <h2>@summary.AvgMttr.ToString("F0") min</h2>
+                        <small>Resolution time</small>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card @GetTrendClass(summary.Trend)">
+                    <div class="card-body text-center">
+                        <h6>Trend</h6>
+                        <h2>@summary.Trend</h2>
+                        <small>@summary.MostCommonErrorCategory</small>
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+
+    <!-- Root Cause Analysis -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header bg-danger text-white">
+                    <h5>🔍 Root Cause Analysis</h5>
+                </div>
+                <div class="card-body">
+                    @if (rootCauses.Any())
+                    {
+                        <div class="table-responsive">
+                            <table class="table table-striped">
+                                <thead>
+                                    <tr>
+                                        <th>Category</th>
+                                        <th>Occurrences</th>
+                                        <th>Percentage</th>
+                                        <th>Last Occurrence</th>
+                                        <th>Suggested Remediation</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var cause in rootCauses)
+                                    {
+                                        <tr>
+                                            <td><strong>@cause.ErrorCategory</strong></td>
+                                            <td><span class="badge bg-danger">@cause.OccurrenceCount</span></td>
+                                            <td>
+                                                <div class="progress">
+                                                    <div class="progress-bar bg-danger" style="width: @(cause.Percentage)%">@cause.Percentage.ToString("F1")%</div>
+                                                </div>
+                                            </td>
+                                            <td>@cause.LastOccurrence.ToString("dd.MM.yyyy HH:mm")</td>
+                                            <td>@cause.SuggestedRemediation</td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    }
+                    else
+                    {
+                        <p class="text-success">✓ No significant error patterns detected</p>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Error Correlations -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header bg-warning">
+                    <h5>🔗 Error Correlations</h5>
+                </div>
+                <div class="card-body">
+                    @if (correlations.Any())
+                    {
+                        <div class="table-responsive">
+                            <table class="table table-sm table-striped">
+                                <thead>
+                                    <tr>
+                                        <th>Primary Job</th>
+                                        <th>Correlated Job</th>
+                                        <th>Correlation Strength</th>
+                                        <th>Co-occurrences</th>
+                                        <th>Potential Root Cause</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var corr in correlations.Take(10))
+                                    {
+                                        <tr>
+                                            <td>@corr.PrimaryJob</td>
+                                            <td>@corr.CorrelatedJob</td>
+                                            <td>
+                                                <div class="progress">
+                                                    <div class="progress-bar @GetCorrelationClass(corr.CorrelationStrength)"
+                                                         style="width: @(corr.CorrelationStrength)%">
+                                                        @corr.CorrelationStrength.ToString("F0")%
+                                                    </div>
+                                                </div>
+                                            </td>
+                                            <td>@corr.CoOccurrenceCount</td>
+                                            <td>@corr.PotentialRootCause</td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    }
+                    else
+                    {
+                        <p class="text-muted">No error correlations detected</p>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- MTTR Metrics -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header bg-info text-white">
+                    <h5>⏱️ MTTR (Mean Time To Repair) Metrics</h5>
+                </div>
+                <div class="card-body">
+                    @if (mttrMetrics.Any())
+                    {
+                        <div class="table-responsive">
+                            <table class="table table-sm table-striped">
+                                <thead>
+                                    <tr>
+                                        <th>Job Caption</th>
+                                        <th>Total Failures</th>
+                                        <th>Resolved</th>
+                                        <th>Avg MTTR (min)</th>
+                                        <th>Min (min)</th>
+                                        <th>Max (min)</th>
+                                        <th>Status</th>
+                                        <th>Trend</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var metric in mttrMetrics.Take(15))
+                                    {
+                                        <tr>
+                                            <td>@metric.JobCaption</td>
+                                            <td>@metric.TotalFailures</td>
+                                            <td>@metric.ResolvedFailures</td>
+                                            <td><strong>@metric.AvgMttr.ToString("F1")</strong></td>
+                                            <td>@metric.MinMttr.ToString("F1")</td>
+                                            <td>@metric.MaxMttr.ToString("F1")</td>
+                                            <td><span class="badge @GetStatusClass(metric.Status)">@metric.Status</span></td>
+                                            <td><span class="badge @GetTrendBadge(metric.Trend)">@metric.Trend</span></td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    }
+                    else
+                    {
+                        <p class="text-muted">No MTTR metrics available</p>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Business Impact -->
+    <div class="row mb-4">
+        <div class="col-12">
+            <div class="card">
+                <div class="card-header bg-dark text-white">
+                    <h5>💰 Business Impact Assessment</h5>
+                </div>
+                <div class="card-body">
+                    @if (businessImpacts.Any())
+                    {
+                        <div class="alert alert-warning">
+                            <strong>Total Estimated Cost:</strong> $@businessImpacts.Sum(i => i.EstimatedCost).ToString("N0")
+                            | <strong>Total Downtime:</strong> @businessImpacts.Sum(i => i.TotalDowntime).ToString("F0") minutes
+                        </div>
+                        <div class="table-responsive">
+                            <table class="table table-striped">
+                                <thead>
+                                    <tr>
+                                        <th>Job Caption</th>
+                                        <th>Errors</th>
+                                        <th>Impact Level</th>
+                                        <th>Criticality</th>
+                                        <th>Affected Users</th>
+                                        <th>Downtime (min)</th>
+                                        <th>Est. Cost</th>
+                                        <th>Priority</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var impact in businessImpacts.Take(15))
+                                    {
+                                        <tr class="@GetImpactRowClass(impact.ImpactLevel)">
+                                            <td><strong>@impact.JobCaption</strong></td>
+                                            <td>@impact.ErrorCount</td>
+                                            <td><span class="badge @GetImpactBadge(impact.ImpactLevel)">@impact.ImpactLevel</span></td>
+                                            <td>
+                                                <div class="progress">
+                                                    <div class="progress-bar @GetCriticalityClass(impact.CriticalityScore)"
+                                                         style="width: @(impact.CriticalityScore)%">
+                                                        @impact.CriticalityScore
+                                                    </div>
+                                                </div>
+                                            </td>
+                                            <td>@impact.AffectedUsers</td>
+                                            <td>@impact.TotalDowntime.ToString("F0")</td>
+                                            <td>$@impact.EstimatedCost.ToString("N0")</td>
+                                            <td><span class="badge @GetPriorityBadge(impact.RecommendedPriority)">@impact.RecommendedPriority</span></td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    }
+                    else
+                    {
+                        <p class="text-success">✓ No significant business impact detected</p>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private bool isLoading = true;
+    private DateTime startDate = DateTime.Now.AddDays(-7);
+    private DateTime endDate = DateTime.Now;
+
+    private ErrorAnalyticsSummaryDto? summary;
+    private List<RootCauseAnalysisDto> rootCauses = new();
+    private List<ErrorCorrelationDto> correlations = new();
+    private List<MttrMetricDto> mttrMetrics = new();
+    private List<BusinessImpactDto> businessImpacts = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadData();
+    }
+
+    private async Task LoadData()
+    {
+        isLoading = true;
+        try
+        {
+            var summaryTask = ErrorAnalyticsService.GetErrorSummaryAsync(startDate, endDate);
+            var rootCausesTask = ErrorAnalyticsService.GetRootCauseAnalysisAsync(startDate, endDate);
+            var correlationsTask = ErrorAnalyticsService.GetErrorCorrelationsAsync(startDate, endDate);
+            var mttrTask = ErrorAnalyticsService.GetMttrMetricsAsync(startDate, endDate);
+            var impactTask = ErrorAnalyticsService.GetBusinessImpactAsync(startDate, endDate);
+
+            await Task.WhenAll(summaryTask, rootCausesTask, correlationsTask, mttrTask, impactTask);
+
+            summary = await summaryTask;
+            rootCauses = await rootCausesTask;
+            correlations = await correlationsTask;
+            mttrMetrics = await mttrTask;
+            businessImpacts = await impactTask;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading error analytics: {ex.Message}");
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task RefreshData() => await LoadData();
+
+    private string GetTrendClass(string trend) => trend switch
+    {
+        "Improving" => "bg-success text-white",
+        "Stable" => "bg-secondary text-white",
+        "Degrading" => "bg-danger text-white",
+        _ => "bg-secondary text-white"
+    };
+
+    private string GetCorrelationClass(double strength) => strength >= 70 ? "bg-danger" : strength >= 40 ? "bg-warning" : "bg-info";
+    private string GetStatusClass(string status) => status switch { "Good" => "bg-success", "Fair" => "bg-warning", "Poor" => "bg-danger", _ => "bg-secondary" };
+    private string GetTrendBadge(string trend) => trend switch { "Improving" => "bg-success", "Stable" => "bg-secondary", "Degrading" => "bg-danger", _ => "bg-secondary" };
+    private string GetImpactBadge(string level) => level switch { "Critical" => "bg-danger", "High" => "bg-warning", "Medium" => "bg-info", "Low" => "bg-secondary", _ => "bg-secondary" };
+    private string GetImpactRowClass(string level) => level switch { "Critical" => "table-danger", "High" => "table-warning", _ => "" };
+    private string GetCriticalityClass(int score) => score >= 75 ? "bg-danger" : score >= 50 ? "bg-warning" : "bg-info";
+    private string GetPriorityBadge(string priority) => priority switch { "Critical" => "bg-danger", "High" => "bg-warning", "Medium" => "bg-info", "Low" => "bg-secondary", _ => "bg-secondary" };
+}

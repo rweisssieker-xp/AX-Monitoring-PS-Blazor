@@ -1,0 +1,188 @@
+@using AXMonitoringBU.Blazor.Services
+
+<div class="filter-panel card mb-3">
+    <div class="card-header">
+        <h5>🔍 Filters</h5>
+    </div>
+    <div class="card-body">
+        <div class="row">
+            <div class="col-md-3">
+                <label class="form-label">Status</label>
+                <select class="form-select" @bind="selectedStatus" @bind:event="onchange">
+                    <option value="">All</option>
+                    <option value="Active">Active</option>
+                    <option value="Inactive">Inactive</option>
+                    <option value="Completed">Completed</option>
+                    <option value="Error">Error</option>
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label class="form-label">Date From</label>
+                <input type="date" class="form-control" @bind="dateFrom" @bind:event="onchange" />
+            </div>
+            <div class="col-md-3">
+                <label class="form-label">Date To</label>
+                <input type="date" class="form-control" @bind="dateTo" @bind:event="onchange" />
+            </div>
+            <div class="col-md-3">
+                <label class="form-label">Search</label>
+                <input type="text" class="form-control" @bind="searchText" @bind:event="oninput" 
+                       placeholder="Search..." />
+            </div>
+        </div>
+        <div class="row mt-3">
+            <div class="col-12">
+                <button class="btn btn-primary btn-sm" @onclick="ApplyFilters">Apply Filters</button>
+                <button class="btn btn-secondary btn-sm" @onclick="ClearFilters">Clear</button>
+                @if (HasActiveFilters)
+                {
+                    <button class="btn btn-success btn-sm" @onclick="SaveFilter">Save Filter</button>
+                }
+            </div>
+        </div>
+        @if (savedFilters.Any())
+        {
+            <div class="row mt-3">
+                <div class="col-12">
+                    <label class="form-label">Saved Filters:</label>
+                    @foreach (var filter in savedFilters)
+                    {
+                        <div class="btn-group me-2 mb-2" role="group">
+                            <button class="btn btn-outline-primary btn-sm" 
+                                    @onclick="() => LoadFilter(filter)">
+                                @filter.Name
+                            </button>
+                            <button class="btn btn-outline-danger btn-sm" 
+                                    @onclick="() => DeleteFilter(filter)"
+                                    title="Delete filter">
+                                ×
+                            </button>
+                        </div>
+                    }
+                </div>
+            </div>
+        }
+    </div>
+</div>
+
+@code {
+    [Parameter] public EventCallback<FilterOptions> OnFiltersChanged { get; set; }
+
+    [Inject] private ILocalStorageService LocalStorage { get; set; } = null!;
+    [Inject] private ILogger<FilterPanel> Logger { get; set; } = null!;
+
+    private string selectedStatus = "";
+    private DateTime? dateFrom;
+    private DateTime? dateTo;
+    private string searchText = "";
+    private List<SavedFilter> savedFilters = new();
+    private const string StorageKey = "saved_filters";
+    private bool isLoading = false;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadSavedFiltersAsync();
+    }
+
+    private bool HasActiveFilters => 
+        !string.IsNullOrEmpty(selectedStatus) || 
+        dateFrom.HasValue || 
+        dateTo.HasValue || 
+        !string.IsNullOrEmpty(searchText);
+
+    private async Task ApplyFilters()
+    {
+        var options = new FilterOptions
+        {
+            Status = selectedStatus,
+            DateFrom = dateFrom,
+            DateTo = dateTo,
+            SearchText = searchText
+        };
+
+        await OnFiltersChanged.InvokeAsync(options);
+    }
+
+    private async Task ClearFilters()
+    {
+        selectedStatus = "";
+        dateFrom = null;
+        dateTo = null;
+        searchText = "";
+        await ApplyFilters();
+    }
+
+    private async Task SaveFilter()
+    {
+        var filter = new SavedFilter
+        {
+            Name = $"Filter_{DateTime.Now:yyyyMMdd_HHmmss}",
+            Options = new FilterOptions
+            {
+                Status = selectedStatus,
+                DateFrom = dateFrom,
+                DateTo = dateTo,
+                SearchText = searchText
+            }
+        };
+
+        savedFilters.Add(filter);
+        await PersistSavedFiltersAsync();
+    }
+
+    private async Task LoadSavedFiltersAsync()
+    {
+        try
+        {
+            isLoading = true;
+            var filters = await LocalStorage.GetItemAsync<List<SavedFilter>>(StorageKey);
+            if (filters != null)
+            {
+                savedFilters = filters;
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error loading saved filters");
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task PersistSavedFiltersAsync()
+    {
+        try
+        {
+            await LocalStorage.SetItemAsync(StorageKey, savedFilters);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error persisting saved filters");
+        }
+    }
+
+    private async Task DeleteFilter(SavedFilter filter)
+    {
+        savedFilters.Remove(filter);
+        await PersistSavedFiltersAsync();
+    }
+
+    private async Task LoadFilter(SavedFilter filter)
+    {
+        selectedStatus = filter.Options.Status ?? "";
+        dateFrom = filter.Options.DateFrom;
+        dateTo = filter.Options.DateTo;
+        searchText = filter.Options.SearchText ?? "";
+
+        await ApplyFilters();
+    }
+
+    private sealed class SavedFilter
+    {
+        public string Name { get; set; } = string.Empty;
+        public FilterOptions Options { get; set; } = new();
+    }
+}
+

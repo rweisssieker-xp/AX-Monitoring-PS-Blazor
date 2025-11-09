@@ -12,6 +12,7 @@ public class KpiDataServiceTests
 {
     private readonly AXDbContext _context;
     private readonly Mock<ILogger<KpiDataService>> _loggerMock;
+    private readonly Mock<IAXDatabaseService> _axDatabaseServiceMock;
     private readonly KpiDataService _service;
 
     public KpiDataServiceTests()
@@ -22,7 +23,8 @@ public class KpiDataServiceTests
 
         _context = new AXDbContext(options);
         _loggerMock = new Mock<ILogger<KpiDataService>>();
-        _service = new KpiDataService(_context, _loggerMock.Object);
+        _axDatabaseServiceMock = new Mock<IAXDatabaseService>();
+        _service = new KpiDataService(_context, _axDatabaseServiceMock.Object, _loggerMock.Object);
     }
 
     [Fact]

@@ -5,29 +5,37 @@ using System.Globalization;
 using System.Text;
 using AXMonitoringBU.Api.Models;
 using AXMonitoringBU.Api.Services;
+using AXMonitoringBU.Api.Data;
+using Microsoft.EntityFrameworkCore;
 
 namespace AXMonitoringBU.Api.Services;
 
 public interface IExportService
 {
-    Task<byte[]> ExportBatchJobsToCsvAsync(IEnumerable<BatchJob> batchJobs);
-    Task<byte[]> ExportSessionsToCsvAsync(IEnumerable<Session> sessions);
-    Task<byte[]> ExportAlertsToCsvAsync(IEnumerable<Alert> alerts);
-    Task<byte[]> ExportBatchJobsToExcelAsync(IEnumerable<BatchJob> batchJobs);
-    Task<byte[]> ExportSessionsToExcelAsync(IEnumerable<Session> sessions);
-    Task<byte[]> ExportAlertsToExcelAsync(IEnumerable<Alert> alerts);
+    Task<byte[]> ExportBatchJobsToCsvAsync(IEnumerable<BatchJob> batchJobs, string? template = null);
+    Task<byte[]> ExportSessionsToCsvAsync(IEnumerable<Session> sessions, string? template = null);
+    Task<byte[]> ExportAlertsToCsvAsync(IEnumerable<Alert> alerts, string? template = null);
+    Task<byte[]> ExportBatchJobsToExcelAsync(IEnumerable<BatchJob> batchJobs, string? template = null);
+    Task<byte[]> ExportSessionsToExcelAsync(IEnumerable<Session> sessions, string? template = null);
+    Task<byte[]> ExportAlertsToExcelAsync(IEnumerable<Alert> alerts, string? template = null);
+    Task<byte[]> ExportToCsvAsync<T>(IEnumerable<T> data, string fileName);
+    Task<byte[]> ExportToExcelAsync<T>(IEnumerable<T> data, string sheetName);
+    Task<List<ExportTemplate>> GetExportTemplatesAsync();
+    Task<ExportTemplate> CreateExportTemplateAsync(ExportTemplate template);
 }
 
 public class ExportService : IExportService
 {
     private readonly ILogger<ExportService> _logger;
+    private readonly AXDbContext _context;
 
-    public ExportService(ILogger<ExportService> logger)
+    public ExportService(ILogger<ExportService> logger, AXDbContext context)
     {
         _logger = logger;
+        _context = context;
     }
 
-    public async Task<byte[]> ExportBatchJobsToCsvAsync(IEnumerable<BatchJob> batchJobs)
+    public async Task<byte[]> ExportBatchJobsToCsvAsync(IEnumerable<BatchJob> batchJobs, string? template = null)
     {
         try
         {
@@ -59,7 +67,7 @@ public class ExportService : IExportService
         }
     }
 
-    public async Task<byte[]> ExportSessionsToCsvAsync(IEnumerable<Session> sessions)
+    public async Task<byte[]> ExportSessionsToCsvAsync(IEnumerable<Session> sessions, string? template = null)
     {
         try
         {
@@ -90,7 +98,7 @@ public class ExportService : IExportService
         }
     }
 
-    public async Task<byte[]> ExportAlertsToCsvAsync(IEnumerable<Alert> alerts)
+    public async Task<byte[]> ExportAlertsToCsvAsync(IEnumerable<Alert> alerts, string? template = null)
     {
         try
         {
@@ -122,7 +130,7 @@ public class ExportService : IExportService
         }
     }
 
-    public async Task<byte[]> ExportBatchJobsToExcelAsync(IEnumerable<BatchJob> batchJobs)
+    public async Task<byte[]> ExportBatchJobsToExcelAsync(IEnumerable<BatchJob> batchJobs, string? template = null)
     {
         try
         {
@@ -176,7 +184,7 @@ public class ExportService : IExportService
         }
     }
 
-    public async Task<byte[]> ExportSessionsToExcelAsync(IEnumerable<Session> sessions)
+    public async Task<byte[]> ExportSessionsToExcelAsync(IEnumerable<Session> sessions, string? template = null)
     {
         try
         {
@@ -228,7 +236,7 @@ public class ExportService : IExportService
         }
     }
 
-    public async Task<byte[]> ExportAlertsToExcelAsync(IEnumerable<Alert> alerts)
+    public async Task<byte[]> ExportAlertsToExcelAsync(IEnumerable<Alert> alerts, string? template = null)
     {
         try
         {
@@ -278,6 +286,162 @@ public class ExportService : IExportService
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error exporting alerts to Excel");
+            throw;
+        }
+    }
+
+    public async Task<List<ExportTemplate>> GetExportTemplatesAsync()
+    {
+        try
+        {
+            var templates = await _context.ExportTemplates.ToListAsync();
+            
+            // If no templates exist, create default ones
+            if (!templates.Any())
+            {
+                var defaultTemplates = new List<ExportTemplate>
+                {
+                    new ExportTemplate
+                    {
+                        Name = "Standard",
+                        EntityType = "BatchJob",
+                        Format = "CSV",
+                        Fields = new List<string> { "BatchJobId", "Name", "Status", "StartTime", "EndTime", "Progress" },
+                        IsDefault = true,
+                        CreatedAt = DateTime.UtcNow
+                    },
+                    new ExportTemplate
+                    {
+                        Name = "Detailed",
+                        EntityType = "BatchJob",
+                        Format = "Excel",
+                        Fields = new List<string> { "BatchJobId", "Name", "Status", "StartTime", "EndTime", "EstimatedDuration", "Progress", "AosServer", "CreatedAt" },
+                        IsDefault = false,
+                        CreatedAt = DateTime.UtcNow
+                    },
+                    new ExportTemplate
+                    {
+                        Name = "Standard",
+                        EntityType = "Session",
+                        Format = "CSV",
+                        Fields = new List<string> { "SessionId", "UserId", "AosServer", "Status", "LoginTime", "LastActivity" },
+                        IsDefault = true,
+                        CreatedAt = DateTime.UtcNow
+                    },
+                    new ExportTemplate
+                    {
+                        Name = "Standard",
+                        EntityType = "Alert",
+                        Format = "CSV",
+                        Fields = new List<string> { "AlertId", "Type", "Severity", "Message", "Status", "Timestamp", "ResolvedAt" },
+                        IsDefault = true,
+                        CreatedAt = DateTime.UtcNow
+                    }
+                };
+
+                _context.ExportTemplates.AddRange(defaultTemplates);
+                await _context.SaveChangesAsync();
+                templates = defaultTemplates;
+            }
+
+            return templates;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error retrieving export templates");
+            // Return empty list on error
+            return new List<ExportTemplate>();
+        }
+    }
+
+    public async Task<ExportTemplate> CreateExportTemplateAsync(ExportTemplate template)
+    {
+        try
+        {
+            template.CreatedAt = DateTime.UtcNow;
+            template.UpdatedAt = DateTime.UtcNow;
+            
+            _context.ExportTemplates.Add(template);
+            await _context.SaveChangesAsync();
+            
+            _logger.LogInformation("Created export template: {Name} for {EntityType}", template.Name, template.EntityType);
+            return template;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error creating export template: {Name}", template.Name);
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// Generic method to export any IEnumerable to CSV
+    /// </summary>
+    public async Task<byte[]> ExportToCsvAsync<T>(IEnumerable<T> data, string fileName)
+    {
+        try
+        {
+            using var memoryStream = new MemoryStream();
+            using var writer = new StreamWriter(memoryStream, Encoding.UTF8);
+            using var csv = new CsvWriter(writer, new CsvConfiguration(CultureInfo.InvariantCulture));
+
+            csv.WriteRecords(data);
+            await writer.FlushAsync();
+            return memoryStream.ToArray();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error exporting data to CSV: {FileName}", fileName);
+            throw;
+        }
+    }
+
+    /// <summary>
+    /// Generic method to export any IEnumerable to Excel
+    /// </summary>
+    public async Task<byte[]> ExportToExcelAsync<T>(IEnumerable<T> data, string sheetName)
+    {
+        try
+        {
+            using var workbook = new XLWorkbook();
+            var worksheet = workbook.Worksheets.Add(sheetName);
+
+            var dataList = data.ToList();
+            if (dataList.Any())
+            {
+                // Get properties
+                var properties = typeof(T).GetProperties();
+
+                // Add headers
+                for (int i = 0; i < properties.Length; i++)
+                {
+                    worksheet.Cell(1, i + 1).Value = properties[i].Name;
+                    worksheet.Cell(1, i + 1).Style.Font.Bold = true;
+                    worksheet.Cell(1, i + 1).Style.Fill.BackgroundColor = XLColor.LightBlue;
+                }
+
+                // Add data
+                for (int row = 0; row < dataList.Count; row++)
+                {
+                    var item = dataList[row];
+                    for (int col = 0; col < properties.Length; col++)
+                    {
+                        var value = properties[col].GetValue(item);
+                        worksheet.Cell(row + 2, col + 1).Value = value?.ToString() ?? "";
+                    }
+                }
+
+                // Auto-fit columns
+                worksheet.Columns().AdjustToContents();
+            }
+
+            using var stream = new MemoryStream();
+            workbook.SaveAs(stream);
+            return await Task.FromResult(stream.ToArray());
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error exporting data to Excel: {SheetName}", sheetName);
             throw;
         }
     }

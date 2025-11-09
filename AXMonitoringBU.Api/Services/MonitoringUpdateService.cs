@@ -62,6 +62,8 @@ public class MonitoringUpdateService : BackgroundService
                     sql_health = sqlHealth,
                     timestamp = DateTime.UtcNow
                 });
+
+                await CheckBaselineAlertsAsync(alertService, kpiData, sqlHealth);
             }
 
             // Send active alerts count
@@ -97,6 +99,63 @@ public class MonitoringUpdateService : BackgroundService
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error in SendUpdatesAsync");
+        }
+    }
+
+    private static async Task CheckBaselineAlertsAsync(IAlertService alertService, Dictionary<string, object> kpiData, Dictionary<string, object> sqlHealth)
+    {
+        static double ToDouble(object? value)
+        {
+            if (value == null)
+            {
+                return 0;
+            }
+
+            return value switch
+            {
+                double d => d,
+                float f => f,
+                decimal m => (double)m,
+                int i => i,
+                long l => l,
+                _ => double.TryParse(value.ToString(), out var parsed) ? parsed : 0
+            };
+        }
+
+        var backlog = ToDouble(kpiData.GetValueOrDefault("batch_backlog"));
+        if (backlog > 0)
+        {
+            await alertService.CheckBaselineAndCreateAlertAsync("Batch Backlog", "backlog", backlog);
+        }
+
+        var errorRate = ToDouble(kpiData.GetValueOrDefault("error_rate"));
+        if (errorRate > 0)
+        {
+            await alertService.CheckBaselineAndCreateAlertAsync("Batch Error Rate", "errorrate", errorRate, 20);
+        }
+
+        var activeSessions = ToDouble(kpiData.GetValueOrDefault("active_sessions"));
+        if (activeSessions > 0)
+        {
+            await alertService.CheckBaselineAndCreateAlertAsync("Active Sessions", "activesessions", activeSessions, 25);
+        }
+
+        var blockingChains = ToDouble(kpiData.GetValueOrDefault("blocking_chains"));
+        if (blockingChains > 0)
+        {
+            await alertService.CheckBaselineAndCreateAlertAsync("Blocking Chains", "blockingchains", blockingChains);
+        }
+
+        var cpuUsage = ToDouble(sqlHealth.GetValueOrDefault("cpu_usage"));
+        if (cpuUsage > 0)
+        {
+            await alertService.CheckBaselineAndCreateAlertAsync("SQL CPU Usage", "cpuusage", cpuUsage, 15);
+        }
+
+        var memoryUsage = ToDouble(sqlHealth.GetValueOrDefault("memory_usage"));
+        if (memoryUsage > 0)
+        {
+            await alertService.CheckBaselineAndCreateAlertAsync("SQL Memory Usage", "memoryusage", memoryUsage, 15);
         }
     }
 }

@@ -2,6 +2,8 @@
 @using Microsoft.Extensions.Configuration
 @using AXMonitoringBU.Blazor.Services
 @inject IApiService ApiService
+@inject IPreferencesService PreferencesService
+@implements IAsyncDisposable
 
 <div class="page">
     <div class="sidebar">
@@ -35,12 +37,24 @@
             @Body
         </article>
     </main>
+    
+    <button class="theme-toggle" @onclick="ToggleTheme" title="Toggle Dark Mode">
+        @if (isDarkMode)
+        {
+            <text>☀️</text>
+        }
+        else
+        {
+            <text>🌙</text>
+        }
+    </button>
 </div>
 
 @code {
     [Inject] private IConfiguration Configuration { get; set; } = null!;
     
     private DatabaseInfoResponse? databaseInfo;
+    private bool isDarkMode = false;
     
     private string Environment => Configuration["App:Environment"] ?? 
                                   Configuration["ASPNETCORE_ENVIRONMENT"] ?? 
@@ -49,6 +63,33 @@
     protected override async Task OnInitializedAsync()
     {
         await LoadDatabaseInfo();
+        await LoadTheme();
+    }
+
+    private async Task LoadTheme()
+    {
+        try
+        {
+            var theme = await PreferencesService.GetThemeAsync();
+            isDarkMode = theme == "dark";
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading theme: {ex.Message}");
+        }
+    }
+
+    private async Task ToggleTheme()
+    {
+        isDarkMode = !isDarkMode;
+        var theme = isDarkMode ? "dark" : "light";
+        await PreferencesService.SetThemeAsync(theme);
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        // Cleanup if needed
+        await Task.CompletedTask;
     }
 
     private async Task LoadDatabaseInfo()

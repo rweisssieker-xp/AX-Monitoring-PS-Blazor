@@ -7,7 +7,8 @@ using AXMonitoringBU.Api.Data;
 namespace AXMonitoringBU.Api.Controllers;
 
 [ApiController]
-[Route("api/v1/batch-job-history")]
+[ApiVersion("1.0")]
+[Route("api/v1/batch-jobs/history")]
 public class BatchJobHistoryController : ControllerBase
 {
     private readonly IAXDatabaseService _axDatabaseService;

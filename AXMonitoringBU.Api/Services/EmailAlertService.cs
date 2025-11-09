@@ -9,6 +9,8 @@ public interface IEmailAlertService
 {
     Task<bool> SendAlertAsync(Alert alert, CancellationToken cancellationToken = default);
     Task<bool> SendDigestAsync(IEnumerable<Alert> alerts, string period = "hourly", CancellationToken cancellationToken = default);
+    Task<bool> SendEmailWithAttachmentAsync(string[] recipients, string subject, string htmlBody, string? textBody, byte[]? attachmentData, string? attachmentFileName, CancellationToken cancellationToken = default);
+    Task<bool> SendEscalationEmailAsync(string recipients, Alert alert, int escalationLevel, string escalationMessage, CancellationToken cancellationToken = default);
 }
 
 public class EmailAlertService : IEmailAlertService
@@ -254,6 +256,159 @@ Alerts:
 {string.Join("\n", alerts.Select(a => $@"- [{a.Severity}] {a.Type}: {a.Message} ({a.Timestamp:yyyy-MM-dd HH:mm:ss})"))}";
 
         return text;
+    }
+
+    public async Task<bool> SendEmailWithAttachmentAsync(string[] recipients, string subject, string htmlBody, string? textBody, byte[]? attachmentData, string? attachmentFileName, CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            if (!recipients.Any())
+            {
+                _logger.LogWarning("No recipients provided for email");
+                return false;
+            }
+
+            var message = new MimeMessage();
+            message.From.Add(new MailboxAddress("AX Monitor", GetSenderEmail()));
+            message.To.AddRange(recipients.Select(r => new MailboxAddress("", r)));
+            message.Subject = subject;
+
+            var bodyBuilder = new BodyBuilder
+            {
+                HtmlBody = htmlBody,
+                TextBody = textBody ?? htmlBody
+            };
+
+            // Add attachment if provided
+            if (attachmentData != null && attachmentData.Length > 0 && !string.IsNullOrEmpty(attachmentFileName))
+            {
+                bodyBuilder.Attachments.Add(attachmentFileName, attachmentData);
+                _logger.LogDebug("Added attachment {FileName} ({Size} bytes) to email", attachmentFileName, attachmentData.Length);
+            }
+
+            message.Body = bodyBuilder.ToMessageBody();
+
+            using var client = new SmtpClient();
+            var smtpServer = GetSmtpServer();
+            var smtpPort = GetSmtpPort();
+            var useTls = GetUseTls();
+
+            await client.ConnectAsync(smtpServer, smtpPort, useTls ? SecureSocketOptions.StartTls : SecureSocketOptions.None, cancellationToken);
+            
+            var senderPassword = GetSenderPassword();
+            if (!string.IsNullOrEmpty(senderPassword))
+            {
+                await client.AuthenticateAsync(GetSenderEmail(), senderPassword, cancellationToken);
+            }
+
+            await client.SendAsync(message, cancellationToken);
+            await client.DisconnectAsync(true, cancellationToken);
+
+            _logger.LogInformation("Email with attachment sent successfully to {Recipients}", string.Join(", ", recipients));
+            return true;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error sending email with attachment to {Recipients}", string.Join(", ", recipients));
+            return false;
+        }
+    }
+
+    public async Task<bool> SendEscalationEmailAsync(string recipients, Alert alert, int escalationLevel, string escalationMessage, CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            var recipientList = recipients.Split(new[] { ',', ';' }, StringSplitOptions.RemoveEmptyEntries)
+                .Select(r => r.Trim())
+                .Where(r => !string.IsNullOrEmpty(r))
+                .ToList();
+
+            if (!recipientList.Any())
+            {
+                _logger.LogWarning("No recipients provided for escalation email");
+                return false;
+            }
+
+            var message = new MimeMessage();
+            message.From.Add(new MailboxAddress("AX Monitor", GetSenderEmail()));
+            message.To.AddRange(recipientList.Select(r => new MailboxAddress("", r)));
+            message.Subject = $"[ESCALATION LEVEL {escalationLevel}] [{alert.Severity}] AX Monitor Alert: {alert.Type}";
+
+            var bodyBuilder = new BodyBuilder
+            {
+                HtmlBody = CreateEscalationHtmlContent(alert, escalationLevel, escalationMessage),
+                TextBody = escalationMessage
+            };
+
+            message.Body = bodyBuilder.ToMessageBody();
+
+            using var client = new SmtpClient();
+            var smtpServer = GetSmtpServer();
+            var smtpPort = GetSmtpPort();
+            var useTls = GetUseTls();
+
+            await client.ConnectAsync(smtpServer, smtpPort, useTls ? SecureSocketOptions.StartTls : SecureSocketOptions.None, cancellationToken);
+            
+            var senderPassword = GetSenderPassword();
+            if (!string.IsNullOrEmpty(senderPassword))
+            {
+                await client.AuthenticateAsync(GetSenderEmail(), senderPassword, cancellationToken);
+            }
+
+            await client.SendAsync(message, cancellationToken);
+            await client.DisconnectAsync(true, cancellationToken);
+
+            _logger.LogInformation("Escalation email sent successfully for alert {AlertId} at level {Level}", alert.AlertId, escalationLevel);
+            return true;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error sending escalation email for alert {AlertId}", alert.AlertId);
+            return false;
+        }
+    }
+
+    private string CreateEscalationHtmlContent(Alert alert, int escalationLevel, string escalationMessage)
+    {
+        var levelColor = escalationLevel switch
+        {
+            1 => "#ffc107",
+            2 => "#ff9800",
+            3 => "#dc3545",
+            _ => "#6c757d"
+        };
+
+        return $@"
+<!DOCTYPE html>
+<html>
+<head>
+    <style>
+        body {{ font-family: Arial, sans-serif; }}
+        .escalation-box {{ border-left: 6px solid {levelColor}; padding: 20px; margin: 10px 0; background-color: #fff3cd; }}
+        .alert-box {{ border-left: 4px solid {(alert.Severity == "Critical" ? "#dc3545" : alert.Severity == "Warning" ? "#ffc107" : "#17a2b8")}; padding: 15px; margin: 10px 0; background-color: #f8f9fa; }}
+        .severity {{ font-weight: bold; color: {(alert.Severity == "Critical" ? "#dc3545" : alert.Severity == "Warning" ? "#ffc107" : "#17a2b8")}; }}
+        .escalation-level {{ font-size: 24px; font-weight: bold; color: {levelColor}; }}
+    </style>
+</head>
+<body>
+    <div class=""escalation-box"">
+        <h2 class=""escalation-level"">🚨 ESCALATION LEVEL {escalationLevel}</h2>
+        <p><strong>This alert has been escalated due to lack of response.</strong></p>
+    </div>
+    <h2>AX Monitor Alert</h2>
+    <div class=""alert-box"">
+        <p><strong>Type:</strong> {alert.Type}</p>
+        <p><strong>Severity:</strong> <span class=""severity"">{alert.Severity}</span></p>
+        <p><strong>Message:</strong> {alert.Message}</p>
+        <p><strong>Timestamp:</strong> {alert.Timestamp:yyyy-MM-dd HH:mm:ss}</p>
+        <p><strong>Alert ID:</strong> {alert.AlertId}</p>
+        <p><strong>Created:</strong> {alert.CreatedAt:yyyy-MM-dd HH:mm:ss} UTC</p>
+    </div>
+    <div style=""margin-top: 20px; padding: 15px; background-color: #e9ecef; border-radius: 5px;"">
+        <pre style=""white-space: pre-wrap; font-family: Arial, sans-serif;"">{escalationMessage}</pre>
+    </div>
+</body>
+</html>";
     }
 }
 

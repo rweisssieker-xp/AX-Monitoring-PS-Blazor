@@ -1,0 +1,106 @@
+@using Microsoft.AspNetCore.Components.Web
+
+<div class="search-box mb-3">
+    <div class="input-group">
+        <span class="input-group-text">🔍</span>
+        <input type="text" 
+               class="form-control" 
+               @bind="searchText" 
+               @bind:event="oninput"
+               @onkeypress="HandleKeyPress"
+               placeholder="Search across all entities..." />
+        <button class="btn btn-primary" @onclick="PerformSearch" disabled="@isSearching">
+            @if (isSearching)
+            {
+                <span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
+            }
+            Search
+        </button>
+    </div>
+    @if (!string.IsNullOrEmpty(searchText) && searchResults.Any())
+    {
+        <div class="search-results card mt-2">
+            <div class="card-body">
+                <h6>Search Results:</h6>
+                <ul class="list-group">
+                    @foreach (var result in searchResults)
+                    {
+                        <li class="list-group-item">
+                            <strong>@result.EntityType</strong>: @result.Title
+                            <a href="@result.Url" class="btn btn-sm btn-link float-end" @onclick="() => NotifySelection(result)">View</a>
+                        </li>
+                    }
+                </ul>
+            </div>
+        </div>
+    }
+    @if (!string.IsNullOrEmpty(searchText) && !searchResults.Any() && hasSearched)
+    {
+        <div class="alert alert-info mt-2">No results found for "@searchText"</div>
+    }
+</div>
+
+@code {
+    [Parameter] public EventCallback<SearchResult> OnSearchResultSelected { get; set; }
+
+    [Inject] private IApiService ApiService { get; set; } = null!;
+    [Inject] private ILogger<SearchBox> Logger { get; set; } = null!;
+
+    private string searchText = "";
+    private List<SearchResult> searchResults = new();
+    private bool hasSearched = false;
+    private bool isSearching = false;
+
+    private async Task PerformSearch()
+    {
+        if (string.IsNullOrWhiteSpace(searchText))
+        {
+            searchResults.Clear();
+            hasSearched = false;
+            return;
+        }
+
+        hasSearched = true;
+        isSearching = true;
+
+        try
+        {
+            var response = await ApiService.GetAsync<SearchResponse>($"api/search?query={Uri.EscapeDataString(searchText)}&limit=20");
+            
+            if (response != null && response.Results != null)
+            {
+                searchResults = response.Results;
+            }
+            else
+            {
+                searchResults = new List<SearchResult>();
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error performing search");
+            searchResults = new List<SearchResult>();
+        }
+        finally
+        {
+            isSearching = false;
+        }
+    }
+
+    private async Task HandleKeyPress(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter")
+        {
+            await PerformSearch();
+        }
+    }
+
+    private async Task NotifySelection(SearchResult result)
+    {
+        if (OnSearchResultSelected.HasDelegate)
+        {
+            await OnSearchResultSelected.InvokeAsync(result);
+        }
+    }
+}
+

@@ -12,6 +12,8 @@ public interface IAlertService
     Task<Alert> CreateAlertAsync(string type, string severity, string message, string? createdBy = null);
     Task<bool> UpdateAlertStatusAsync(int id, string status);
     Task<bool> DeleteAlertAsync(int id);
+    Task<bool> AcknowledgeAlertAsync(int id, string acknowledgedBy);
+    Task<Alert?> CheckBaselineAndCreateAlertAsync(string metricName, string metricType, double currentValue, double thresholdPercent = 30.0, string? metricClass = null, string environment = "DEV");
 }
 
 public class AlertService : IAlertService
@@ -23,6 +25,7 @@ public class AlertService : IAlertService
     private readonly ITeamsNotificationService? _teamsService;
     private readonly IBaselineService? _baselineService;
     private readonly IMaintenanceWindowService? _maintenanceWindowService;
+    private readonly IWebhookService? _webhookService;
 
     public AlertService(
         AXDbContext context, 
@@ -36,6 +39,7 @@ public class AlertService : IAlertService
         _teamsService = serviceProvider.GetService<ITeamsNotificationService>();
         _baselineService = serviceProvider.GetService<IBaselineService>();
         _maintenanceWindowService = serviceProvider.GetService<IMaintenanceWindowService>();
+        _webhookService = serviceProvider.GetService<IWebhookService>();
     }
 
     public async Task<IEnumerable<Alert>> GetAlertsAsync(string? status = null)
@@ -102,6 +106,60 @@ public class AlertService : IAlertService
                 throw new InvalidOperationException($"Alert creation suppressed during maintenance window: {string.Join(", ", activeWindows.Select(w => w.Name))}");
             }
 
+            // Deduplication: Check if similar alert was created recently (within 15 minutes)
+            var dedupeKey = $"{type}:{severity}:{message}";
+            var fifteenMinutesAgo = DateTime.UtcNow.AddMinutes(-15);
+            var recentSimilarAlert = await _context.Alerts
+                .Where(a => a.Type == type && 
+                           a.Severity == severity && 
+                           a.Message == message && 
+                           a.CreatedAt >= fifteenMinutesAgo &&
+                           a.Status == "Active")
+                .OrderByDescending(a => a.CreatedAt)
+                .FirstOrDefaultAsync();
+
+            if (recentSimilarAlert != null)
+            {
+                _logger.LogInformation("Alert deduplication: Similar alert {AlertId} created {MinutesAgo} minutes ago, skipping duplicate", 
+                    recentSimilarAlert.AlertId, 
+                    (DateTime.UtcNow - recentSimilarAlert.CreatedAt).TotalMinutes);
+                return recentSimilarAlert; // Return existing alert instead of creating duplicate
+            }
+
+            // Throttling: Check if too many alerts of this type were created recently (max 1 per 15 minutes per key)
+            var recentAlertsCount = await _context.Alerts
+                .Where(a => a.Type == type && a.CreatedAt >= fifteenMinutesAgo)
+                .CountAsync();
+
+            if (recentAlertsCount >= 1)
+            {
+                _logger.LogWarning("Alert throttling: Too many alerts of type {Type} in the last 15 minutes ({Count}), suppressing", 
+                    type, recentAlertsCount);
+                throw new InvalidOperationException($"Alert throttled: Maximum 1 alert per 15 minutes for type '{type}'");
+            }
+
+            // Suppression: Check if an alert of this type was created in the last 30 minutes
+            // If so, suppress new alerts for 30 minutes after the first one
+            var thirtyMinutesAgo = DateTime.UtcNow.AddMinutes(-30);
+            var suppressedAlert = await _context.Alerts
+                .Where(a => a.Type == type && 
+                           a.Severity == severity && 
+                           a.CreatedAt >= thirtyMinutesAgo &&
+                           a.Status == "Active")
+                .OrderByDescending(a => a.CreatedAt)
+                .FirstOrDefaultAsync();
+
+            if (suppressedAlert != null)
+            {
+                var minutesSinceFirstAlert = (DateTime.UtcNow - suppressedAlert.CreatedAt).TotalMinutes;
+                if (minutesSinceFirstAlert < 30)
+                {
+                    _logger.LogInformation("Alert suppression: Alert of type {Type} suppressed for 30 minutes after first alert {AlertId} ({MinutesSince} minutes ago)", 
+                        type, suppressedAlert.AlertId, minutesSinceFirstAlert);
+                    throw new InvalidOperationException($"Alert suppressed: Similar alert created {minutesSinceFirstAlert:F1} minutes ago. Suppression period: 30 minutes");
+                }
+            }
+
             var alert = new Alert
             {
                 AlertId = $"ALERT_{DateTime.UtcNow:yyyyMMdd_HHmmss}",
@@ -134,6 +192,18 @@ public class AlertService : IAlertService
                         if (_teamsService != null)
                         {
                             await _teamsService.SendAlertAsync(alert);
+                        }
+                        if (_webhookService != null)
+                        {
+                            // Send webhook to all alert subscriptions
+                            var subscriptions = await _webhookService.GetSubscriptionsAsync();
+                            var alertSubscriptions = subscriptions.Where(s => 
+                                s.Enabled && (s.EventType == "alert" || s.EventType == "all"));
+                            
+                            foreach (var subscription in alertSubscriptions)
+                            {
+                                await _webhookService.SendAlertWebhookAsync(subscription.Url, alert);
+                            }
                         }
                     }
                     catch (Exception ex)
@@ -200,6 +270,32 @@ public class AlertService : IAlertService
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error deleting alert {AlertId}", id);
+            throw;
+        }
+    }
+
+    public async Task<bool> AcknowledgeAlertAsync(int id, string acknowledgedBy)
+    {
+        try
+        {
+            var alert = await _context.Alerts.FindAsync(id);
+            if (alert == null)
+            {
+                return false;
+            }
+
+            alert.AcknowledgedBy = acknowledgedBy;
+            alert.AcknowledgedAt = DateTime.UtcNow;
+            alert.UpdatedAt = DateTime.UtcNow;
+            // Don't change status to "Acknowledged" automatically - let user decide
+            // If status is "Active", it remains "Active" but is acknowledged
+
+            await _context.SaveChangesAsync();
+            return true;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error acknowledging alert {AlertId}", id);
             throw;
         }
     }

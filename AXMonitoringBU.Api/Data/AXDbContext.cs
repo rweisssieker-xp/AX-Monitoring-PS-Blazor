@@ -19,6 +19,31 @@ public class AXDbContext : DbContext
     public DbSet<Baseline> Baselines { get; set; }
     public DbSet<MaintenanceWindow> MaintenanceWindows { get; set; }
     public DbSet<BatchJobHistoryAnalysis> BatchJobHistoryAnalyses { get; set; }
+    public DbSet<PerformanceBudget> PerformanceBudgets { get; set; }
+    public DbSet<ScheduledReport> ScheduledReports { get; set; }
+    public DbSet<ExportTemplate> ExportTemplates { get; set; }
+    public DbSet<WebhookSubscription> WebhookSubscriptions { get; set; }
+    public DbSet<ApplicationSetting> ApplicationSettings { get; set; }
+
+    // Analytics and Performance Tracking
+    public DbSet<JobExecutionHistory> JobExecutionHistories { get; set; }
+    public DbSet<JobBaseline> JobBaselines { get; set; }
+    public DbSet<ErrorCorrelation> ErrorCorrelations { get; set; }
+    public DbSet<BusinessImpact> BusinessImpacts { get; set; }
+    
+    // Alert Escalation and Correlation
+    public DbSet<AlertEscalationRule> AlertEscalationRules { get; set; }
+    public DbSet<AlertEscalation> AlertEscalations { get; set; }
+    public DbSet<AlertCorrelation> AlertCorrelations { get; set; }
+    
+    // Shared Dashboards
+    public DbSet<SharedDashboard> SharedDashboards { get; set; }
+    public DbSet<DashboardShare> DashboardShares { get; set; }
+    
+    // Cost Tracking
+    public DbSet<CostTracking> CostTrackings { get; set; }
+    public DbSet<CostOptimizationRecommendation> CostOptimizationRecommendations { get; set; }
+    public DbSet<CostBudget> CostBudgets { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -73,6 +98,11 @@ public class AXDbContext : DbContext
             entity.Property(e => e.Message).HasMaxLength(1000).IsRequired();
             entity.Property(e => e.Status).HasMaxLength(50).IsRequired();
             entity.Property(e => e.CreatedBy).HasMaxLength(100);
+            entity.Property(e => e.Metadata).HasMaxLength(4000);
+            entity.Property(e => e.AcknowledgedBy).HasMaxLength(100);
+            entity.HasIndex(e => e.CorrelationId);
+            entity.HasIndex(e => e.Status);
+            entity.HasIndex(e => e.CreatedAt);
         });
 
         // Configure SqlHealth
@@ -147,6 +177,246 @@ public class AXDbContext : DbContext
             entity.Property(e => e.ErrorSuggestions).HasMaxLength(4000);
             entity.HasIndex(e => new { e.Caption, e.CreatedDateTime });
             entity.HasIndex(e => e.AnalyzedAt);
+        });
+
+        // Configure PerformanceBudget
+        modelBuilder.Entity<PerformanceBudget>(entity =>
+        {
+            entity.ToTable("PerformanceBudgets");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Endpoint).HasMaxLength(500).IsRequired();
+            entity.HasIndex(e => e.Endpoint).IsUnique();
+        });
+
+        // Configure ScheduledReport
+        modelBuilder.Entity<ScheduledReport>(entity =>
+        {
+            entity.ToTable("ScheduledReports");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Name).HasMaxLength(255).IsRequired();
+            entity.Property(e => e.ReportType).HasMaxLength(50).IsRequired();
+            entity.Property(e => e.Schedule).HasMaxLength(50).IsRequired();
+            entity.Property(e => e.CronExpression).HasMaxLength(100);
+            entity.Property(e => e.Recipients).HasMaxLength(1000);
+            entity.HasIndex(e => e.Enabled);
+            entity.HasIndex(e => e.NextRun);
+        });
+
+        // Configure ExportTemplate
+        modelBuilder.Entity<ExportTemplate>(entity =>
+        {
+            entity.ToTable("ExportTemplates");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Name).HasMaxLength(255).IsRequired();
+            entity.Property(e => e.EntityType).HasMaxLength(50).IsRequired();
+            entity.Property(e => e.Format).HasMaxLength(50).IsRequired();
+            entity.Property(e => e.FieldsJson).IsRequired();
+            entity.Property(e => e.CreatedBy).HasMaxLength(100);
+            entity.HasIndex(e => new { e.EntityType, e.Format });
+        });
+
+        // Configure WebhookSubscription
+        modelBuilder.Entity<WebhookSubscription>(entity =>
+        {
+            entity.ToTable("WebhookSubscriptions");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Name).HasMaxLength(255).IsRequired();
+            entity.Property(e => e.Url).HasMaxLength(2000).IsRequired();
+            entity.Property(e => e.EventType).HasMaxLength(50).IsRequired();
+            entity.Property(e => e.Secret).HasMaxLength(500);
+            entity.Property(e => e.CreatedBy).HasMaxLength(100);
+            entity.HasIndex(e => e.Enabled);
+            entity.HasIndex(e => e.EventType);
+        });
+
+        // Configure ApplicationSetting
+        modelBuilder.Entity<ApplicationSetting>(entity =>
+        {
+            entity.ToTable("ApplicationSettings");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Key).HasMaxLength(255).IsRequired();
+            entity.Property(e => e.Value).HasMaxLength(4000).IsRequired();
+            entity.Property(e => e.Description).HasMaxLength(1000);
+            entity.HasIndex(e => e.Key).IsUnique();
+        });
+
+        // Configure JobExecutionHistory
+        modelBuilder.Entity<JobExecutionHistory>(entity =>
+        {
+            entity.ToTable("JobExecutionHistories");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.BatchJobId).HasMaxLength(100).IsRequired();
+            entity.Property(e => e.JobName).HasMaxLength(500).IsRequired();
+            entity.Property(e => e.AosServer).HasMaxLength(100).IsRequired();
+            entity.Property(e => e.Status).HasMaxLength(50).IsRequired();
+            entity.Property(e => e.ErrorMessage).HasMaxLength(4000);
+            entity.HasIndex(e => e.BatchJobId);
+            entity.HasIndex(e => e.JobName);
+            entity.HasIndex(e => e.StartTime);
+            entity.HasIndex(e => new { e.JobName, e.StartTime });
+        });
+
+        // Configure JobBaseline
+        modelBuilder.Entity<JobBaseline>(entity =>
+        {
+            entity.ToTable("JobBaselines");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.JobName).HasMaxLength(500).IsRequired();
+            entity.HasIndex(e => e.JobName);
+            entity.HasIndex(e => e.CalculatedAt);
+        });
+
+        // Configure ErrorCorrelation
+        modelBuilder.Entity<ErrorCorrelation>(entity =>
+        {
+            entity.ToTable("ErrorCorrelations");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.JobNameA).HasMaxLength(500).IsRequired();
+            entity.Property(e => e.JobNameB).HasMaxLength(500).IsRequired();
+            entity.Property(e => e.Confidence).HasMaxLength(50);
+            entity.HasIndex(e => new { e.JobNameA, e.JobNameB });
+            entity.HasIndex(e => e.CorrelationCoefficient);
+            entity.HasIndex(e => e.CalculatedAt);
+        });
+
+        // Configure BusinessImpact
+        modelBuilder.Entity<BusinessImpact>(entity =>
+        {
+            entity.ToTable("BusinessImpacts");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.JobName).HasMaxLength(500).IsRequired();
+            entity.Property(e => e.BusinessProcess).HasMaxLength(255).IsRequired();
+            entity.Property(e => e.Priority).HasMaxLength(50).IsRequired();
+            entity.Property(e => e.EscalationContact).HasMaxLength(500);
+            entity.Property(e => e.Description).HasMaxLength(2000);
+            entity.HasIndex(e => e.JobName).IsUnique();
+            entity.HasIndex(e => e.Priority);
+            entity.HasIndex(e => e.ImpactScore);
+        });
+
+        // Configure AlertEscalationRule
+        modelBuilder.Entity<AlertEscalationRule>(entity =>
+        {
+            entity.ToTable("AlertEscalationRules");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Name).HasMaxLength(255).IsRequired();
+            entity.Property(e => e.Description).HasMaxLength(1000);
+            entity.Property(e => e.AlertType).HasMaxLength(100);
+            entity.Property(e => e.MinSeverity).HasMaxLength(50).IsRequired();
+            entity.Property(e => e.FirstEscalationRecipients).HasMaxLength(1000).IsRequired();
+            entity.Property(e => e.SecondEscalationRecipients).HasMaxLength(1000);
+            entity.Property(e => e.FinalEscalationRecipients).HasMaxLength(1000);
+            entity.Property(e => e.CreatedBy).HasMaxLength(100).IsRequired();
+            entity.HasIndex(e => e.Enabled);
+            entity.HasIndex(e => e.AlertType);
+        });
+
+        // Configure AlertEscalation
+        modelBuilder.Entity<AlertEscalation>(entity =>
+        {
+            entity.ToTable("AlertEscalations");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Recipients).HasMaxLength(1000).IsRequired();
+            entity.Property(e => e.ErrorMessage).HasMaxLength(2000);
+            entity.HasIndex(e => e.AlertId);
+            entity.HasIndex(e => e.EscalationRuleId);
+            entity.HasIndex(e => e.EscalatedAt);
+        });
+
+        // Configure AlertCorrelation
+        modelBuilder.Entity<AlertCorrelation>(entity =>
+        {
+            entity.ToTable("AlertCorrelations");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.CorrelationId).HasMaxLength(100).IsRequired();
+            entity.Property(e => e.Title).HasMaxLength(500).IsRequired();
+            entity.Property(e => e.Description).HasMaxLength(2000);
+            entity.Property(e => e.Severity).HasMaxLength(50).IsRequired();
+            entity.Property(e => e.Status).HasMaxLength(50).IsRequired();
+            entity.Property(e => e.CorrelationReason).HasMaxLength(500).IsRequired();
+            entity.HasIndex(e => e.CorrelationId).IsUnique();
+            entity.HasIndex(e => e.Status);
+            entity.HasIndex(e => e.FirstDetectedAt);
+        });
+
+        // Configure SharedDashboard
+        modelBuilder.Entity<SharedDashboard>(entity =>
+        {
+            entity.ToTable("SharedDashboards");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.DashboardId).HasMaxLength(100).IsRequired();
+            entity.Property(e => e.Name).HasMaxLength(255).IsRequired();
+            entity.Property(e => e.Description).HasMaxLength(1000);
+            entity.Property(e => e.LayoutJson).IsRequired();
+            entity.Property(e => e.CreatedBy).HasMaxLength(100).IsRequired();
+            entity.Property(e => e.TeamName).HasMaxLength(255);
+            entity.Property(e => e.Tags).HasMaxLength(500);
+            entity.HasIndex(e => e.DashboardId).IsUnique();
+            entity.HasIndex(e => e.CreatedBy);
+            entity.HasIndex(e => e.IsPublic);
+            entity.HasIndex(e => e.IsTeamWorkspace);
+            entity.HasIndex(e => e.TeamName);
+        });
+
+        // Configure DashboardShare
+        modelBuilder.Entity<DashboardShare>(entity =>
+        {
+            entity.ToTable("DashboardShares");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.SharedWith).HasMaxLength(255).IsRequired();
+            entity.Property(e => e.Permission).HasMaxLength(50).IsRequired();
+            entity.Property(e => e.SharedBy).HasMaxLength(100).IsRequired();
+            entity.HasIndex(e => e.DashboardId);
+            entity.HasIndex(e => e.SharedWith);
+            entity.HasIndex(e => new { e.DashboardId, e.SharedWith }).IsUnique();
+        });
+
+        // Configure CostTracking
+        modelBuilder.Entity<CostTracking>(entity =>
+        {
+            entity.ToTable("CostTrackings");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.ResourceType).HasMaxLength(100).IsRequired();
+            entity.Property(e => e.ResourceId).HasMaxLength(255).IsRequired();
+            entity.Property(e => e.ResourceName).HasMaxLength(500).IsRequired();
+            entity.Property(e => e.Currency).HasMaxLength(10).IsRequired();
+            entity.Property(e => e.CostBreakdown).HasMaxLength(4000);
+            entity.Property(e => e.Metadata).HasMaxLength(4000);
+            entity.HasIndex(e => new { e.ResourceType, e.ResourceId });
+            entity.HasIndex(e => e.PeriodStart);
+            entity.HasIndex(e => e.PeriodEnd);
+            entity.HasIndex(e => e.CreatedAt);
+        });
+
+        // Configure CostOptimizationRecommendation
+        modelBuilder.Entity<CostOptimizationRecommendation>(entity =>
+        {
+            entity.ToTable("CostOptimizationRecommendations");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.RecommendationType).HasMaxLength(100).IsRequired();
+            entity.Property(e => e.ResourceType).HasMaxLength(100).IsRequired();
+            entity.Property(e => e.ResourceId).HasMaxLength(255).IsRequired();
+            entity.Property(e => e.Title).HasMaxLength(500).IsRequired();
+            entity.Property(e => e.Description).HasMaxLength(2000);
+            entity.Property(e => e.Priority).HasMaxLength(50).IsRequired();
+            entity.Property(e => e.ImplementedBy).HasMaxLength(100);
+            entity.HasIndex(e => new { e.ResourceType, e.ResourceId });
+            entity.HasIndex(e => e.IsImplemented);
+            entity.HasIndex(e => e.Priority);
+            entity.HasIndex(e => e.CreatedAt);
+        });
+
+        // Configure CostBudget
+        modelBuilder.Entity<CostBudget>(entity =>
+        {
+            entity.ToTable("CostBudgets");
+            entity.HasKey(e => e.Id);
+            entity.Property(e => e.Name).HasMaxLength(255).IsRequired();
+            entity.Property(e => e.Period).HasMaxLength(50).IsRequired();
+            entity.Property(e => e.Currency).HasMaxLength(10).IsRequired();
+            entity.Property(e => e.ResourceType).HasMaxLength(100);
+            entity.HasIndex(e => e.IsActive);
+            entity.HasIndex(e => e.Period);
         });
     }
 }

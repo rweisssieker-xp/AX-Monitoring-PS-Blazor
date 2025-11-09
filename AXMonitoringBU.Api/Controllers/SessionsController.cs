@@ -4,7 +4,11 @@ using AXMonitoringBU.Api.Models;
 
 namespace AXMonitoringBU.Api.Controllers;
 
+/// <summary>
+/// Controller for managing user sessions
+/// </summary>
 [ApiController]
+[ApiVersion("1.0")]
 [Route("api/v1/sessions")]
 public class SessionsController : ControllerBase
 {
@@ -22,6 +26,11 @@ public class SessionsController : ControllerBase
         _logger = logger;
     }
 
+    /// <summary>
+    /// Retrieves all sessions, optionally filtered by status
+    /// </summary>
+    /// <param name="status">Optional status filter (Active, Inactive)</param>
+    /// <returns>List of sessions</returns>
     [HttpGet]
     public async Task<IActionResult> GetSessions([FromQuery] string? status = null)
     {

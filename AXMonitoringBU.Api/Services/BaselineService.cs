@@ -148,8 +148,26 @@ public class BaselineService : IBaselineService
                 UpdatedAt = DateTime.UtcNow
             };
 
-            // Check if baseline already exists
-            var existing = await GetBaselineAsync(metricName, metricType, metricClass, environment);
+            // Check if baseline already exists (without tracking to avoid conflicts)
+            var query = _context.Baselines
+                .AsNoTracking()
+                .Where(b => b.MetricName == metricName
+                    && b.MetricType == metricType
+                    && b.Environment == environment);
+
+            if (!string.IsNullOrEmpty(metricClass))
+            {
+                query = query.Where(b => b.MetricClass == metricClass);
+            }
+            else
+            {
+                query = query.Where(b => b.MetricClass == null);
+            }
+
+            var existing = await query
+                .OrderByDescending(b => b.BaselineDate)
+                .FirstOrDefaultAsync();
+
             if (existing != null)
             {
                 baseline.Id = existing.Id;

@@ -30,7 +30,35 @@ dotnet publish AXMonitoringBU.Api/AXMonitoringBU.Api.csproj -c Release -o ./publ
 dotnet publish AXMonitoringBU.Blazor/AXMonitoringBU.Blazor.csproj -c Release -o ./publish/blazor
 ```
 
-### 3. Configure Environment Variables
+### 3. Configure Environment Variables and Secrets Management
+
+#### Secrets Management Options
+
+**Option 1: Environment Variables (Recommended for Production)**
+- Set all secrets as environment variables
+- Use `${VARIABLE_NAME}` syntax in `appsettings.Production.json`
+- Never commit secrets to source control
+
+**Option 2: Azure Key Vault (Recommended for Azure deployments)**
+```bash
+# Install Azure Key Vault NuGet package
+dotnet add package Azure.Extensions.AspNetCore.Configuration.Secrets
+dotnet add package Azure.Identity
+```
+
+**Option 3: AWS Secrets Manager (For AWS deployments)**
+```bash
+# Install AWS Secrets Manager package
+dotnet add package AWSSDK.SecretsManager
+```
+
+**Option 4: HashiCorp Vault (For on-premises deployments)**
+```bash
+# Install Vault client library
+dotnet add package VaultSharp
+```
+
+#### Required Environment Variables
 
 Create `appsettings.Production.json` files or set environment variables:
 

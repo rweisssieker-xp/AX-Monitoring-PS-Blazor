@@ -8,6 +8,7 @@ public interface ITeamsNotificationService
 {
     Task<bool> SendAlertAsync(Alert alert, CancellationToken cancellationToken = default);
     Task<bool> SendDigestAsync(IEnumerable<Alert> alerts, string period = "hourly", CancellationToken cancellationToken = default);
+    Task<bool> SendEscalationMessageAsync(string recipients, string escalationMessage, CancellationToken cancellationToken = default);
 }
 
 public class TeamsNotificationService : ITeamsNotificationService
@@ -223,6 +224,76 @@ public class TeamsNotificationService : ITeamsNotificationService
                 schema = "http://adaptivecards.io/schemas/adaptive-card.json"
             }
         };
+    }
+
+    public async Task<bool> SendEscalationMessageAsync(string recipients, string escalationMessage, CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            // For Teams, we use the critical webhook URL for escalations
+            // Recipients are handled via Teams channel mentions in the message
+            var webhookUrl = GetWebhookUrl("Critical");
+            if (string.IsNullOrEmpty(webhookUrl))
+            {
+                _logger.LogWarning("No Teams webhook URL configured for escalation");
+                return false;
+            }
+
+            var card = new
+            {
+                contentType = "application/vnd.microsoft.card.adaptive",
+                content = new
+                {
+                    type = "AdaptiveCard",
+                    version = "1.4",
+                    body = new object[]
+                    {
+                        new
+                        {
+                            type = "TextBlock",
+                            text = "🚨 Alert Escalation",
+                            weight = "Bolder",
+                            size = "Large",
+                            color = "Attention"
+                        },
+                        new
+                        {
+                            type = "TextBlock",
+                            text = escalationMessage,
+                            wrap = true,
+                            spacing = "Medium"
+                        }
+                    },
+                    schema = "http://adaptivecards.io/schemas/adaptive-card.json"
+                }
+            };
+
+            var payload = new
+            {
+                type = "message",
+                attachments = new[] { card }
+            };
+
+            var client = _httpClientFactory.CreateClient();
+            var response = await client.PostAsJsonAsync(webhookUrl, payload, cancellationToken);
+
+            if (response.IsSuccessStatusCode)
+            {
+                _logger.LogInformation("Teams escalation message sent successfully");
+                return true;
+            }
+            else
+            {
+                var errorContent = await response.Content.ReadAsStringAsync(cancellationToken);
+                _logger.LogError("Failed to send Teams escalation message. Status: {StatusCode}, Error: {Error}", response.StatusCode, errorContent);
+                return false;
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error sending Teams escalation message");
+            return false;
+        }
     }
 }
 

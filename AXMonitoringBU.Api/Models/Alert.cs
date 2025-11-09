@@ -13,5 +13,25 @@ public class Alert
     public string? CreatedBy { get; set; }
     public DateTime CreatedAt { get; set; }
     public DateTime? UpdatedAt { get; set; }
+    
+    /// <summary>
+    /// Correlation ID if this alert is part of a correlated incident
+    /// </summary>
+    public int? CorrelationId { get; set; }
+    
+    /// <summary>
+    /// Additional metadata for correlation (JSON)
+    /// </summary>
+    public string? Metadata { get; set; }
+    
+    /// <summary>
+    /// Acknowledged by user
+    /// </summary>
+    public string? AcknowledgedBy { get; set; }
+    
+    /// <summary>
+    /// When the alert was acknowledged
+    /// </summary>
+    public DateTime? AcknowledgedAt { get; set; }
 }
 

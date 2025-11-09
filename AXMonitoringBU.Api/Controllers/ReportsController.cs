@@ -6,7 +6,8 @@ using System.Text.Json;
 namespace AXMonitoringBU.Api.Controllers;
 
 [ApiController]
-[Route("api/v1/[controller]")]
+[ApiVersion("1.0")]
+[Route("api/v1/reports")]
 public class ReportsController : ControllerBase
 {
     private readonly IPdfReportService _pdfService;

@@ -5,7 +5,11 @@ using AXMonitoringBU.Api.Services;
 
 namespace AXMonitoringBU.Api.Controllers;
 
+/// <summary>
+/// Controller for retrieving monitoring metrics and KPIs
+/// </summary>
 [ApiController]
+[ApiVersion("1.0")]
 [Route("api/v1/metrics")]
 public class MetricsController : ControllerBase
 {
@@ -23,6 +27,12 @@ public class MetricsController : ControllerBase
         _logger = logger;
     }
 
+    /// <summary>
+    /// Retrieves historical metrics data for the specified time range
+    /// </summary>
+    /// <param name="metric">Optional metric name to filter (e.g., cpu_usage, memory_usage, active_sessions)</param>
+    /// <param name="timeRange">Time range: 24h, 7d, 30d, or 90d (default: 24h)</param>
+    /// <returns>Historical metrics data</returns>
     [HttpGet("history")]
     public IActionResult GetMetricsHistory([FromQuery] string? metric = null, [FromQuery] string timeRange = "24h")
     {
@@ -95,6 +105,10 @@ public class MetricsController : ControllerBase
         return data;
     }
 
+    /// <summary>
+    /// Retrieves current system metrics including KPIs and SQL health status
+    /// </summary>
+    /// <returns>Current metrics with KPIs and SQL health data</returns>
     [HttpGet("current")]
     public async Task<IActionResult> GetCurrentMetrics()
     {
@@ -117,6 +131,10 @@ public class MetricsController : ControllerBase
         }
     }
 
+    /// <summary>
+    /// Calculates and retrieves business KPIs based on technical metrics
+    /// </summary>
+    /// <returns>Business KPIs including availability, performance, and reliability metrics</returns>
     [HttpGet("kpis")]
     public async Task<IActionResult> GetBusinessKpis()
     {
@@ -158,6 +176,10 @@ public class MetricsController : ControllerBase
         }
     }
 
+    /// <summary>
+    /// Generates a business impact report based on current system metrics
+    /// </summary>
+    /// <returns>Business impact report with risk assessment and recommendations</returns>
     [HttpGet("business-impact")]
     public async Task<IActionResult> GetBusinessImpact()
     {

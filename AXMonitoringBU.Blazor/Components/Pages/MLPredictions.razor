@@ -48,16 +48,141 @@
 @if (predictionResult != null)
 {
     <div class="row mb-4">
-        <div class="col-md-4">
-            <MetricCard Title="Predicted Runtime" Value="@($"{predictionResult.predictedRuntime:F1} min")" Color="#1f77b4" 
-                       Delta="@($"Confidence: {predictionResult.confidence}")" />
+        <div class="col-md-8">
+            <div class="card">
+                <div class="card-header bg-primary text-white">
+                    <h5 class="mb-0">🔮 Prediction Results</h5>
+                </div>
+                <div class="card-body">
+                    <div class="row">
+                        <div class="col-md-6 mb-4">
+                            <div class="text-center">
+                                <h3 class="display-4 text-primary mb-2">@($"{predictionResult.predictedRuntime:F1}")</h3>
+                                <p class="text-muted mb-0">minutes</p>
+                                <small class="text-muted">Predicted Runtime</small>
+                            </div>
+                        </div>
+                        <div class="col-md-6 mb-4">
+                            <div class="text-center">
+                                <div class="position-relative d-inline-block">
+                                    <svg width="120" height="120" class="mx-auto">
+                                        <circle cx="60" cy="60" r="50" fill="none" stroke="#e9ecef" stroke-width="10"/>
+                                        <circle cx="60" cy="60" r="50" fill="none"
+                                                stroke="@GetConfidenceColor(predictionResult.confidence)"
+                                                stroke-width="10"
+                                                stroke-dasharray="@GetConfidenceDashArray(predictionResult.confidence)"
+                                                stroke-linecap="round"
+                                                transform="rotate(-90 60 60)"/>
+                                        <text x="60" y="65" text-anchor="middle" font-size="20" font-weight="bold" fill="@GetConfidenceColor(predictionResult.confidence)">
+                                            @predictionResult.confidence
+                                        </text>
+                                    </svg>
+                                </div>
+                                <p class="mt-2 mb-0"><strong>Confidence Level</strong></p>
+                                <small class="text-muted">@GetConfidenceLabel(predictionResult.confidence)</small>
+                            </div>
+                        </div>
+                    </div>
+
+                    <hr />
+
+                    <div class="row">
+                        <div class="col-md-6 mb-3">
+                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                <span class="text-muted">R² Score (Model Fit)</span>
+                                <strong class="@GetR2Class(predictionResult.r2)">@($"{predictionResult.r2:F3}")</strong>
+                            </div>
+                            <div class="progress" style="height: 20px;">
+                                <div class="progress-bar @GetR2BarClass(predictionResult.r2)"
+                                     role="progressbar"
+                                     style="width: @($"{predictionResult.r2 * 100:F0}%")"
+                                     aria-valuenow="@(predictionResult.r2 * 100)"
+                                     aria-valuemin="0"
+                                     aria-valuemax="100">
+                                    @($"{predictionResult.r2 * 100:F0}%")
+                                </div>
+                            </div>
+                            <small class="text-muted">@GetR2Description(predictionResult.r2)</small>
+                        </div>
+
+                        <div class="col-md-6 mb-3">
+                            <div class="d-flex justify-content-between align-items-center mb-2">
+                                <span class="text-muted">MAE (Mean Absolute Error)</span>
+                                <strong class="@GetMAEClass(predictionResult.mae)">@($"{predictionResult.mae:F1}") min</strong>
+                            </div>
+                            <div class="progress" style="height: 20px;">
+                                <div class="progress-bar @GetMAEBarClass(predictionResult.mae)"
+                                     role="progressbar"
+                                     style="width: @GetMAEPercentage(predictionResult.mae)%"
+                                     aria-valuenow="@GetMAEPercentage(predictionResult.mae)"
+                                     aria-valuemin="0"
+                                     aria-valuemax="100">
+                                    @GetMAELabel(predictionResult.mae)
+                                </div>
+                            </div>
+                            <small class="text-muted">@GetMAEDescription(predictionResult.mae)</small>
+                        </div>
+                    </div>
+
+                    <div class="alert alert-info mb-0">
+                        <i class="bi bi-info-circle"></i> <strong>Key Influencing Factor:</strong> @predictionResult.keyFactor
+                    </div>
+                </div>
+            </div>
         </div>
+
         <div class="col-md-4">
-            <MetricCard Title="Model Performance" Value="@($"R²: {predictionResult.r2:F3}")" Color="#17a2b8" 
-                       Delta="@($"MAE: {predictionResult.mae:F1}")" />
-        </div>
-        <div class="col-md-4">
-            <MetricCard Title="Key Factor" Value="@predictionResult.keyFactor" Color="#28a745" />
+            <div class="card">
+                <div class="card-header bg-success text-white">
+                    <h5 class="mb-0">📊 Input Parameters</h5>
+                </div>
+                <div class="card-body">
+                    <div class="mb-3">
+                        <div class="d-flex justify-content-between mb-1">
+                            <small class="text-muted">Job Complexity</small>
+                            <small class="fw-bold">@jobComplexity%</small>
+                        </div>
+                        <div class="progress" style="height: 8px;">
+                            <div class="progress-bar bg-primary" style="width: @jobComplexity%"></div>
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <div class="d-flex justify-content-between mb-1">
+                            <small class="text-muted">Data Volume</small>
+                            <small class="fw-bold">@dataVolume%</small>
+                        </div>
+                        <div class="progress" style="height: 8px;">
+                            <div class="progress-bar bg-info" style="width: @dataVolume%"></div>
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <div class="d-flex justify-content-between mb-1">
+                            <small class="text-muted">AOS Server Load</small>
+                            <small class="fw-bold">@aosLoad%</small>
+                        </div>
+                        <div class="progress" style="height: 8px;">
+                            <div class="progress-bar bg-warning" style="width: @aosLoad%"></div>
+                        </div>
+                    </div>
+
+                    <div class="mb-3">
+                        <div class="d-flex justify-content-between mb-1">
+                            <small class="text-muted">Time of Day</small>
+                            <small class="fw-bold">@GetTimeOfDayLabel(timeOfDay)</small>
+                        </div>
+                        <div class="badge bg-secondary w-100">@GetTimeOfDayLabel(timeOfDay)</div>
+                    </div>
+
+                    <hr />
+
+                    <div class="text-center">
+                        <small class="text-muted d-block mb-2">Prediction generated at</small>
+                        <small class="fw-bold">@predictionResult.timestamp.ToString("HH:mm:ss")</small>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -77,24 +202,71 @@
     <div class="col-12">
         <h4>🔍 Anomaly Detection</h4>
         <div class="card">
+            <div class="card-header">
+                <div class="d-flex justify-content-between align-items-center">
+                    <span>Real-time Pattern Analysis</span>
+                    <button class="btn btn-primary btn-sm" @onclick="DetectAnomalies" disabled="@isDetectingAnomalies">
+                        @if (isDetectingAnomalies)
+                        {
+                            <span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>
+                            <span>Analyzing...</span>
+                        }
+                        else
+                        {
+                            <span>🔍 Detect Anomalies</span>
+                        }
+                    </button>
+                </div>
+            </div>
             <div class="card-body">
-                <button class="btn btn-primary mb-3" @onclick="DetectAnomalies">🔍 Detect Anomalies</button>
-                
                 @if (anomalies != null && anomalies.Any())
                 {
-                    <div class="alert alert-warning">
-                        <h5>⚠️ Anomalies Detected</h5>
-                        <ul>
-                            @foreach (var anomaly in anomalies)
+                    <div class="alert alert-warning border-warning">
+                        <div class="d-flex align-items-center mb-3">
+                            <i class="bi bi-exclamation-triangle-fill text-warning me-2" style="font-size: 1.5rem;"></i>
+                            <h5 class="mb-0">⚠️ @anomalies.Count Anomal@(anomalies.Count == 1 ? "y" : "ies") Detected</h5>
+                        </div>
+
+                        <div class="row">
+                            @foreach (var anomaly in anomalyDetails ?? new List<AnomalyDetail>())
                             {
-                                <li>@anomaly</li>
+                                <div class="col-md-6 mb-3">
+                                    <div class="card border-@GetAnomalySeverityClass(anomaly.Severity)">
+                                        <div class="card-body">
+                                            <div class="d-flex justify-content-between align-items-start mb-2">
+                                                <h6 class="mb-0">@anomaly.Metric</h6>
+                                                <span class="badge bg-@GetAnomalySeverityClass(anomaly.Severity)">@anomaly.Severity</span>
+                                            </div>
+                                            <p class="text-muted small mb-2">@anomaly.Description</p>
+                                            <div class="d-flex justify-content-between">
+                                                <small><strong>Value:</strong> @($"{anomaly.Value:F1}")</small>
+                                                <small class="text-muted">@anomaly.Timestamp.ToString("HH:mm:ss")</small>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
                             }
-                        </ul>
+                        </div>
                     </div>
                 }
                 else if (anomalies != null)
                 {
-                    <div class="alert alert-success">✅ No anomalies detected</div>
+                    <div class="alert alert-success border-success">
+                        <div class="d-flex align-items-center">
+                            <i class="bi bi-check-circle-fill text-success me-2" style="font-size: 1.5rem;"></i>
+                            <div>
+                                <h5 class="mb-1">✅ No Anomalies Detected</h5>
+                                <p class="mb-0 text-muted">All system metrics are within expected ranges. Last checked: @DateTime.Now.ToString("HH:mm:ss")</p>
+                            </div>
+                        </div>
+                    </div>
+                }
+                else
+                {
+                    <div class="text-center text-muted py-4">
+                        <i class="bi bi-search" style="font-size: 3rem;"></i>
+                        <p class="mt-2">Click "Detect Anomalies" to scan for unusual patterns in the last 24 hours</p>
+                    </div>
                 }
             </div>
         </div>
@@ -103,44 +275,120 @@
 
 <div class="row mb-4">
     <div class="col-12">
-        <h4>📈 Performance Metrics</h4>
+        <h4>📈 Performance Metrics & 24h Predictions</h4>
         <div class="card">
+            <div class="card-header">
+                <span>Resource Usage Forecasting</span>
+            </div>
             <div class="card-body">
-                <div class="table-responsive">
-                    <table class="table table-striped">
-                        <thead>
-                            <tr>
-                                <th>Metric</th>
-                                <th>Current Value</th>
-                                <th>Predicted Value (24h)</th>
-                                <th>Confidence</th>
-                                <th>Status</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <tr>
-                                <td>CPU Usage</td>
-                                <td>@(currentCpuUsage?.ToString("F1") ?? "N/A")%</td>
-                                <td>@(predictedCpuUsage?.ToString("F1") ?? "N/A")%</td>
-                                <td>85%</td>
-                                <td><StatusBadge Status="good" Text="Stable" /></td>
-                            </tr>
-                            <tr>
-                                <td>Memory Usage</td>
-                                <td>@(currentMemoryUsage?.ToString("F1") ?? "N/A")%</td>
-                                <td>@(predictedMemoryUsage?.ToString("F1") ?? "N/A")%</td>
-                                <td>82%</td>
-                                <td><StatusBadge Status="good" Text="Stable" /></td>
-                            </tr>
-                            <tr>
-                                <td>Error Rate</td>
-                                <td>@(currentErrorRate?.ToString("F1") ?? "N/A")%</td>
-                                <td>@(predictedErrorRate?.ToString("F1") ?? "N/A")%</td>
-                                <td>78%</td>
-                                <td><StatusBadge Status="good" Text="Low" /></td>
-                            </tr>
-                        </tbody>
-                    </table>
+                <div class="row">
+                    <!-- CPU Usage -->
+                    <div class="col-md-4 mb-4">
+                        <div class="card border-primary">
+                            <div class="card-body">
+                                <h6 class="text-muted mb-3">💻 CPU Usage</h6>
+                                <div class="d-flex justify-content-between align-items-end mb-3">
+                                    <div>
+                                        <small class="text-muted d-block">Current</small>
+                                        <h3 class="mb-0 text-primary">@(currentCpuUsage?.ToString("F1") ?? "N/A")%</h3>
+                                    </div>
+                                    <div class="text-end">
+                                        <small class="text-muted d-block">Predicted (24h)</small>
+                                        <h4 class="mb-0 @GetPredictionChangeClass(currentCpuUsage, predictedCpuUsage)">
+                                            @(predictedCpuUsage?.ToString("F1") ?? "N/A")%
+                                        </h4>
+                                    </div>
+                                </div>
+                                <div class="progress mb-2" style="height: 10px;">
+                                    <div class="progress-bar bg-primary"
+                                         style="width: @(currentCpuUsage ?? 0)%"
+                                         title="Current: @(currentCpuUsage?.ToString("F1") ?? "N/A")%">
+                                    </div>
+                                </div>
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <span class="badge bg-success">85% Confidence</span>
+                                    <small class="text-muted">
+                                        @GetTrendIcon(currentCpuUsage, predictedCpuUsage)
+                                        @GetTrendLabel(currentCpuUsage, predictedCpuUsage)
+                                    </small>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Memory Usage -->
+                    <div class="col-md-4 mb-4">
+                        <div class="card border-info">
+                            <div class="card-body">
+                                <h6 class="text-muted mb-3">🧠 Memory Usage</h6>
+                                <div class="d-flex justify-content-between align-items-end mb-3">
+                                    <div>
+                                        <small class="text-muted d-block">Current</small>
+                                        <h3 class="mb-0 text-info">@(currentMemoryUsage?.ToString("F1") ?? "N/A")%</h3>
+                                    </div>
+                                    <div class="text-end">
+                                        <small class="text-muted d-block">Predicted (24h)</small>
+                                        <h4 class="mb-0 @GetPredictionChangeClass(currentMemoryUsage, predictedMemoryUsage)">
+                                            @(predictedMemoryUsage?.ToString("F1") ?? "N/A")%
+                                        </h4>
+                                    </div>
+                                </div>
+                                <div class="progress mb-2" style="height: 10px;">
+                                    <div class="progress-bar bg-info"
+                                         style="width: @(currentMemoryUsage ?? 0)%"
+                                         title="Current: @(currentMemoryUsage?.ToString("F1") ?? "N/A")%">
+                                    </div>
+                                </div>
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <span class="badge bg-success">82% Confidence</span>
+                                    <small class="text-muted">
+                                        @GetTrendIcon(currentMemoryUsage, predictedMemoryUsage)
+                                        @GetTrendLabel(currentMemoryUsage, predictedMemoryUsage)
+                                    </small>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Error Rate -->
+                    <div class="col-md-4 mb-4">
+                        <div class="card border-warning">
+                            <div class="card-body">
+                                <h6 class="text-muted mb-3">⚠️ Error Rate</h6>
+                                <div class="d-flex justify-content-between align-items-end mb-3">
+                                    <div>
+                                        <small class="text-muted d-block">Current</small>
+                                        <h3 class="mb-0 text-warning">@(currentErrorRate?.ToString("F1") ?? "N/A")%</h3>
+                                    </div>
+                                    <div class="text-end">
+                                        <small class="text-muted d-block">Predicted (24h)</small>
+                                        <h4 class="mb-0 @GetPredictionChangeClass(currentErrorRate, predictedErrorRate)">
+                                            @(predictedErrorRate?.ToString("F1") ?? "N/A")%
+                                        </h4>
+                                    </div>
+                                </div>
+                                <div class="progress mb-2" style="height: 10px;">
+                                    <div class="progress-bar bg-warning"
+                                         style="width: @((currentErrorRate ?? 0) * 10)%"
+                                         title="Current: @(currentErrorRate?.ToString("F1") ?? "N/A")%">
+                                    </div>
+                                </div>
+                                <div class="d-flex justify-content-between align-items-center">
+                                    <span class="badge bg-success">78% Confidence</span>
+                                    <small class="text-muted">
+                                        @GetTrendIcon(currentErrorRate, predictedErrorRate)
+                                        @GetTrendLabel(currentErrorRate, predictedErrorRate)
+                                    </small>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="alert alert-info mb-0">
+                    <i class="bi bi-info-circle me-2"></i>
+                    <strong>Note:</strong> Predictions are based on historical patterns and current trends.
+                    Actual values may vary based on system load and external factors.
                 </div>
             </div>
         </div>
@@ -154,6 +402,8 @@
     private string timeOfDay = "0.5";
     private PredictionResult? predictionResult;
     private List<string>? anomalies;
+    private List<AnomalyDetail>? anomalyDetails;
+    private bool isDetectingAnomalies = false;
     private double? currentCpuUsage;
     private double? currentMemoryUsage;
     private double? currentErrorRate;
@@ -270,30 +520,49 @@
 
     private async Task DetectAnomalies()
     {
+        isDetectingAnomalies = true;
+        StateHasChanged();
+
         try
         {
             var request = new AnomalyDetectionRequest
             {
                 LookbackHours = 24
             };
-            
+
             var response = await PredictionsService.DetectAnomaliesAsync(request);
-            
+
             if (response != null && response.anomalies != null)
             {
-                anomalies = response.anomalies.Select(a => 
+                anomalies = response.anomalies.Select(a =>
                     $"{a.metric}: {a.description} (Value: {a.value:F1}, Severity: {a.severity}) at {a.timestamp:HH:mm}"
                 ).ToList();
+
+                anomalyDetails = response.anomalies.Select(a => new AnomalyDetail
+                {
+                    Metric = a.metric,
+                    Description = a.description,
+                    Value = a.value,
+                    Severity = a.severity,
+                    Timestamp = a.timestamp
+                }).ToList();
             }
             else
             {
                 anomalies = new List<string>();
+                anomalyDetails = new List<AnomalyDetail>();
             }
         }
         catch (Exception ex)
         {
             Console.WriteLine($"Error detecting anomalies: {ex.Message}");
             anomalies = new List<string>();
+            anomalyDetails = new List<AnomalyDetail>();
+        }
+        finally
+        {
+            isDetectingAnomalies = false;
+            StateHasChanged();
         }
     }
 
@@ -304,6 +573,175 @@
         public double r2 { get; set; }
         public double mae { get; set; }
         public string keyFactor { get; set; } = string.Empty;
+        public DateTime timestamp { get; set; } = DateTime.Now;
+    }
+
+    // Confidence gauge helper methods
+    private string GetConfidenceColor(string confidence)
+    {
+        return confidence switch
+        {
+            "High" => "#28a745",
+            "Medium" => "#ffc107",
+            "Low" => "#dc3545",
+            _ => "#6c757d"
+        };
+    }
+
+    private string GetConfidenceDashArray(string confidence)
+    {
+        var percentage = confidence switch
+        {
+            "High" => 85,
+            "Medium" => 60,
+            "Low" => 35,
+            _ => 50
+        };
+        var circumference = 2 * Math.PI * 50; // radius = 50
+        var dashLength = circumference * percentage / 100;
+        return $"{dashLength} {circumference}";
+    }
+
+    private string GetConfidenceLabel(string confidence)
+    {
+        return confidence switch
+        {
+            "High" => "Reliable prediction",
+            "Medium" => "Moderate reliability",
+            "Low" => "Use with caution",
+            _ => "Unknown"
+        };
+    }
+
+    // R² Score helper methods
+    private string GetR2Class(double r2)
+    {
+        if (r2 >= 0.9) return "text-success";
+        if (r2 >= 0.7) return "text-info";
+        if (r2 >= 0.5) return "text-warning";
+        return "text-danger";
+    }
+
+    private string GetR2BarClass(double r2)
+    {
+        if (r2 >= 0.9) return "bg-success";
+        if (r2 >= 0.7) return "bg-info";
+        if (r2 >= 0.5) return "bg-warning";
+        return "bg-danger";
+    }
+
+    private string GetR2Description(double r2)
+    {
+        if (r2 >= 0.9) return "Excellent model fit - predictions are highly accurate";
+        if (r2 >= 0.7) return "Good model fit - predictions are reliable";
+        if (r2 >= 0.5) return "Fair model fit - predictions may vary";
+        return "Poor model fit - predictions are less reliable";
+    }
+
+    // MAE helper methods
+    private string GetMAEClass(double mae)
+    {
+        if (mae < 5) return "text-success";
+        if (mae < 10) return "text-info";
+        if (mae < 20) return "text-warning";
+        return "text-danger";
+    }
+
+    private string GetMAEBarClass(double mae)
+    {
+        if (mae < 5) return "bg-success";
+        if (mae < 10) return "bg-info";
+        if (mae < 20) return "bg-warning";
+        return "bg-danger";
+    }
+
+    private double GetMAEPercentage(double mae)
+    {
+        // Convert MAE to a percentage (inverse - lower is better)
+        // Assume max MAE of 30 minutes for scale
+        return Math.Max(0, Math.Min(100, 100 - (mae / 30 * 100)));
+    }
+
+    private string GetMAELabel(double mae)
+    {
+        if (mae < 5) return "Excellent";
+        if (mae < 10) return "Good";
+        if (mae < 20) return "Fair";
+        return "Poor";
+    }
+
+    private string GetMAEDescription(double mae)
+    {
+        if (mae < 5) return "Predictions typically within ±5 minutes of actual runtime";
+        if (mae < 10) return "Predictions typically within ±10 minutes of actual runtime";
+        if (mae < 20) return "Predictions may vary by up to 20 minutes";
+        return "Predictions have high variance - use with caution";
+    }
+
+    // Time of day helper
+    private string GetTimeOfDayLabel(string timeValue)
+    {
+        return timeValue switch
+        {
+            "0.2" => "Morning (6am-12pm)",
+            "0.5" => "Afternoon (12pm-6pm)",
+            "0.8" => "Evening (6pm-12am)",
+            "0.1" => "Night (12am-6am)",
+            _ => "Unknown"
+        };
+    }
+
+    // Anomaly severity helper
+    private string GetAnomalySeverityClass(string severity)
+    {
+        return severity?.ToLower() switch
+        {
+            "high" => "danger",
+            "medium" => "warning",
+            "low" => "info",
+            _ => "secondary"
+        };
+    }
+
+    // Performance prediction helpers
+    private string GetPredictionChangeClass(double? current, double? predicted)
+    {
+        if (current == null || predicted == null) return "text-muted";
+
+        var change = predicted.Value - current.Value;
+        if (Math.Abs(change) < 2) return "text-success"; // Stable
+        if (change > 0) return "text-warning"; // Increasing
+        return "text-info"; // Decreasing
+    }
+
+    private string GetTrendIcon(double? current, double? predicted)
+    {
+        if (current == null || predicted == null) return "→";
+
+        var change = predicted.Value - current.Value;
+        if (Math.Abs(change) < 2) return "→"; // Stable
+        if (change > 0) return "↗"; // Increasing
+        return "↘"; // Decreasing
+    }
+
+    private string GetTrendLabel(double? current, double? predicted)
+    {
+        if (current == null || predicted == null) return "No data";
+
+        var change = predicted.Value - current.Value;
+        if (Math.Abs(change) < 2) return "Stable";
+        if (change > 0) return $"+{change:F1}% increase";
+        return $"{change:F1}% decrease";
+    }
+
+    // Anomaly detail class
+    private class AnomalyDetail
+    {
+        public string Metric { get; set; } = string.Empty;
+        public string Description { get; set; } = string.Empty;
+        public double Value { get; set; }
+        public string Severity { get; set; } = string.Empty;
+        public DateTime Timestamp { get; set; }
     }
 }
 

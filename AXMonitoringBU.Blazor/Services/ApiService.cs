@@ -19,29 +19,28 @@ public class ApiService : IApiService
     {
         _httpClient = httpClientFactory.CreateClient("ApiClient");
         _logger = logger;
-        
-        // Ignore SSL certificate errors in development
-        if (_httpClient.BaseAddress?.Scheme == "https")
-        {
-            var handler = new HttpClientHandler
-            {
-                ServerCertificateCustomValidationCallback = HttpClientHandler.DangerousAcceptAnyServerCertificateValidator
-            };
-            _httpClient = new HttpClient(handler)
-            {
-                BaseAddress = _httpClient.BaseAddress,
-                Timeout = _httpClient.Timeout
-            };
-        }
     }
 
     public async Task<T?> GetAsync<T>(string endpoint)
     {
         try
         {
-            var response = await _httpClient.GetAsync(endpoint);
+            // Use ResponseHeadersRead to avoid buffering - stream the response manually
+            var response = await _httpClient.GetAsync(endpoint, HttpCompletionOption.ResponseHeadersRead);
             response.EnsureSuccessStatusCode();
-            return await response.Content.ReadFromJsonAsync<T>();
+
+            // Read the stream directly without buffering to avoid chunked encoding issues
+            using var stream = await response.Content.ReadAsStreamAsync();
+            using var memoryStream = new MemoryStream();
+            await stream.CopyToAsync(memoryStream);
+            memoryStream.Position = 0;
+
+            var result = await System.Text.Json.JsonSerializer.DeserializeAsync<T>(memoryStream, new System.Text.Json.JsonSerializerOptions
+            {
+                PropertyNameCaseInsensitive = true
+            });
+
+            return result;
         }
         catch (Exception ex)
         {

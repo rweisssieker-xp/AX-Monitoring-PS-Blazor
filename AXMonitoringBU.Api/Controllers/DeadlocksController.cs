@@ -4,6 +4,7 @@ using AXMonitoringBU.Api.Services;
 namespace AXMonitoringBU.Api.Controllers;
 
 [ApiController]
+[ApiVersion("1.0")]
 [Route("api/v1/deadlocks")]
 public class DeadlocksController : ControllerBase
 {

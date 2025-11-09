@@ -5,7 +5,8 @@ using AXMonitoringBU.Api.Models;
 namespace AXMonitoringBU.Api.Controllers;
 
 [ApiController]
-[Route("api/v1/[controller]")]
+[ApiVersion("1.0")]
+[Route("api/v1/notifications")]
 public class NotificationsController : ControllerBase
 {
     private readonly IEmailAlertService _emailService;

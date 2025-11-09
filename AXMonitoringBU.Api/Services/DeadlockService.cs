@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using AXMonitoringBU.Api.Data;
 using Microsoft.Data.SqlClient;
 using System.Data;
+using System.Linq;
 using System.Xml.Linq;
 
 namespace AXMonitoringBU.Api.Services;
@@ -46,21 +47,55 @@ public class DeadlockService : IDeadlockService
     private readonly AXDbContext _context;
     private readonly ILogger<DeadlockService> _logger;
     private readonly IConfiguration _configuration;
+    private readonly IDeadlockCaptureService? _deadlockCaptureService;
 
     public DeadlockService(
         AXDbContext context,
         ILogger<DeadlockService> logger,
-        IConfiguration configuration)
+        IConfiguration configuration,
+        IDeadlockCaptureService? deadlockCaptureService = null)
     {
         _context = context;
         _logger = logger;
         _configuration = configuration;
+        _deadlockCaptureService = deadlockCaptureService;
     }
 
     public async Task<List<DeadlockInfo>> GetRecentDeadlocksAsync(int count = 100)
     {
         try
         {
+            List<DeadlockInfo>? deadlocksFromSession = null;
+
+            if (_deadlockCaptureService != null)
+            {
+                try
+                {
+                    await _deadlockCaptureService.EnsureSessionAsync();
+                    var sessionEvents = await _deadlockCaptureService.GetDeadlocksFromSessionAsync(count);
+                    if (sessionEvents.Count > 0)
+                    {
+                        deadlocksFromSession = sessionEvents
+                            .Select(e => ParseDeadlockXml(e.Timestamp, string.Empty, e.DeadlockXml, e.DeadlockXml))
+                            .Where(d => d != null)
+                            .Select(d => d!)
+                            .OrderByDescending(d => d.Timestamp)
+                            .Take(count)
+                            .ToList();
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Failed to read deadlocks from Extended Events session");
+                }
+            }
+
+            if (deadlocksFromSession != null && deadlocksFromSession.Count > 0)
+            {
+                _logger.LogInformation("Retrieved {Count} deadlocks from Extended Events session", deadlocksFromSession.Count);
+                return deadlocksFromSession;
+            }
+
             var connectionString = _configuration.GetConnectionString("DefaultConnection") 
                 ?? throw new InvalidOperationException("Database connection string not configured");
 
@@ -191,11 +226,13 @@ public class DeadlockService : IDeadlockService
             if (deadlock == null)
                 return null;
 
+            var victimSession = deadlock.Attribute("victim")?.Value ?? victim;
+
             var deadlockInfo = new DeadlockInfo
             {
                 Id = $"DL_{timestamp:yyyyMMdd_HHmmss}_{Guid.NewGuid():N}",
                 Timestamp = timestamp,
-                VictimSessionId = victim,
+                VictimSessionId = victimSession,
                 DeadlockXml = xml
             };
 
@@ -213,7 +250,7 @@ public class DeadlockService : IDeadlockService
                     SessionId = sessionId,
                     DatabaseName = dbName,
                     SqlText = sqlText,
-                    IsVictim = sessionId == victim
+                    IsVictim = sessionId == victimSession
                 });
             }
 

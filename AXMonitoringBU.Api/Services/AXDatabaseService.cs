@@ -16,6 +16,8 @@ public interface IAXDatabaseService
     Task<BatchJobHistoryPageResult> GetBatchJobHistoryPageAsync(int page, int pageSize, string? captionPattern = null, DateTime? createdFrom = null);
     Task<bool> RestartBatchJobInAXAsync(string batchJobRecId);
     Task<bool> KillSessionInAXAsync(string sessionId);
+    Task<List<WaitStat>> GetWaitStatsAsync(int topN = 20);
+    Task<List<TopQuery>> GetTopQueriesAsync(int topN = 20, double minDurationMs = 0);
 }
 
 public class AXDatabaseService : IAXDatabaseService
@@ -74,12 +76,12 @@ public class AXDatabaseService : IAXDatabaseService
                         ELSE 'Unknown'
                     END AS Status,
                     ISNULL(T.SERVERID, '') AS AosServer,
-                    T.EXECUTESTARTDATETIME AS StartTime,
-                    T.EXECUTESTARTDATETIME AS EndTime,
+                    ISNULL(T.STARTDATETIME, J.CREATEDDATETIME) AS StartTime,
+                    T.ENDDATETIME AS EndTime,
                     J.CREATEDDATETIME AS CreatedAt,
                     CAST(0 AS INT) AS Progress
-                FROM BATCHJOB J
-                LEFT JOIN BATCH T ON T.BATCHJOBID = J.RECID";
+                FROM BATCHJOB J WITH (NOLOCK)
+                LEFT JOIN BATCH T WITH (NOLOCK) ON T.BATCHJOBID = J.RECID";
 
             if (!string.IsNullOrEmpty(status))
             {
@@ -103,7 +105,7 @@ public class AXDatabaseService : IAXDatabaseService
                 query += " WHERE J.STATUS IN (1, 3, 4) OR J.CREATEDDATETIME >= DATEADD(DAY, -7, GETDATE())";
             }
 
-            query += " ORDER BY ISNULL(T.EXECUTESTARTDATETIME, J.CREATEDDATETIME) DESC";
+            query += " ORDER BY ISNULL(T.STARTDATETIME, J.CREATEDDATETIME) DESC";
 
             using var command = new SqlCommand(query, connection);
             command.CommandTimeout = 60;
@@ -147,7 +149,7 @@ public class AXDatabaseService : IAXDatabaseService
             await connection.OpenAsync();
 
             var query = @"
-                SELECT 
+                SELECT
                     CAST(SESSIONID AS NVARCHAR(50)) AS SessionId,
                     ISNULL(USERID, '') AS UserId,
                     ISNULL(SERVERID, '') AS AosServer,
@@ -157,8 +159,8 @@ public class AXDatabaseService : IAXDatabaseService
                     END AS Status,
                     LOGINDATETIME AS LoginTime,
                     LOGINDATETIME AS LastActivity,
-                    ISNULL(DATABASEID, '') AS Database
-                FROM SYSCLIENTSESSIONS";
+                    '' AS [Database]
+                FROM SYSCLIENTSESSIONS WITH (NOLOCK)";
 
             if (!string.IsNullOrEmpty(status))
             {
@@ -204,8 +206,8 @@ public class AXDatabaseService : IAXDatabaseService
             await connection.OpenAsync();
 
             var query = @"
-                SELECT COUNT(*) 
-                FROM BATCHJOB J
+                SELECT COUNT(*)
+                FROM BATCHJOB J WITH (NOLOCK)
                 WHERE J.STATUS IN (1, 3)"; // Waiting, Running
 
             using var command = new SqlCommand(query, connection);
@@ -230,10 +232,10 @@ public class AXDatabaseService : IAXDatabaseService
 
             // Get total batch jobs from last 24 hours
             var query = @"
-                SELECT 
+                SELECT
                     COUNT(*) AS total,
                     SUM(CASE WHEN J.STATUS = 4 THEN 1 ELSE 0 END) AS errors
-                FROM BATCHJOB J
+                FROM BATCHJOB J WITH (NOLOCK)
                 WHERE J.CREATEDDATETIME >= DATEADD(DAY, -1, GETDATE())";
 
             using var command = new SqlCommand(query, connection);
@@ -268,8 +270,8 @@ public class AXDatabaseService : IAXDatabaseService
             await connection.OpenAsync();
 
             var query = @"
-                SELECT COUNT(*) 
-                FROM SYSCLIENTSESSIONS
+                SELECT COUNT(*)
+                FROM SYSCLIENTSESSIONS WITH (NOLOCK)
                 WHERE STATUS = 1"; // Active
 
             using var command = new SqlCommand(query, connection);
@@ -294,65 +296,41 @@ public class AXDatabaseService : IAXDatabaseService
             using var connection = new SqlConnection(_connectionString);
             await connection.OpenAsync();
 
-            // Query using SQL Server DMVs - improved version with better CPU/Memory detection
-            var healthQuery = @"
-                SELECT 
-                    -- CPU Usage - using SQL Server process CPU from sys.dm_os_performance_counters
-                    CAST(ISNULL((SELECT TOP 1 CAST(cntr_value AS FLOAT) FROM sys.dm_os_performance_counters 
-                        WHERE object_name LIKE '%SQLServer:Process%' 
-                        AND counter_name = '% Processor Time'
-                        AND instance_name = 'sqlservr'), 0.0) AS FLOAT) AS cpu_usage,
-                    
-                    -- Memory Usage (%) - SQL Server memory vs total physical memory
-                    CAST(100.0 * 
-                        (SELECT ISNULL(SUM(pages_kb), 0) FROM sys.dm_os_memory_clerks) / 
-                        NULLIF((SELECT total_physical_memory_kb FROM sys.dm_os_sys_info), 0) AS FLOAT) AS memory_usage,
-                    
-                    -- IO Wait (average wait time in seconds)
-                    CAST((SELECT ISNULL(AVG(CAST(wait_time_ms AS FLOAT)), 0) FROM sys.dm_os_wait_stats WHERE wait_type LIKE 'PAGEIOLATCH%') / 1000.0 AS FLOAT) AS io_wait,
-                    
-                    -- TempDB Usage (%) - simplified for now
-                    CAST(ISNULL((SELECT TOP 1 CAST(size * 8192.0 / 1024.0 / 1024.0 AS FLOAT) FROM tempdb.sys.database_files WHERE type = 0), 0.0) AS FLOAT) AS tempdb_usage,
-                    
-                    -- Active Connections (all sessions, not just running)
-                    (SELECT COUNT(*) FROM sys.dm_exec_sessions WHERE session_id > 50) AS active_connections,
-                    
-                    -- Longest Running Query (minutes)
-                    (SELECT ISNULL(MAX(DATEDIFF(MINUTE, r.start_time, GETDATE())), 0)
-                     FROM sys.dm_exec_requests r
-                     WHERE r.session_id > 50) AS longest_running_query";
-
-            // Try to get real CPU usage using a simpler approach
+            // SQL Server 2008 R2+ compatible version - uses SERVERPROPERTY for memory
+            // This query is compatible with SQL Server 2016 and earlier versions
             var simpleHealthQuery = @"
                 WITH sys_info AS (
-                    SELECT total_physical_memory_kb FROM sys.dm_os_sys_info
+                    SELECT
+                        -- Use SERVERPROPERTY which works in SQL Server 2008 R2+
+                        -- SERVERPROPERTY('PhysicalMemory') returns MB, convert to KB
+                        CAST(SERVERPROPERTY('PhysicalMemory') AS BIGINT) * 1024 AS total_memory_kb
                 ),
                 memory_used AS (
                     SELECT SUM(pages_kb) AS used_kb FROM sys.dm_os_memory_clerks
                 )
-                SELECT 
+                SELECT
                     -- CPU Usage - try multiple sources
                     CAST(ISNULL((
-                        SELECT TOP 1 CAST(cntr_value AS FLOAT) 
-                        FROM sys.dm_os_performance_counters 
+                        SELECT TOP 1 CAST(cntr_value AS FLOAT)
+                        FROM sys.dm_os_performance_counters
                         WHERE (counter_name = '% Processor Time' OR counter_name = 'CPU usage %')
                         AND (object_name LIKE '%SQLServer:%' OR instance_name = '_Total')
                         ORDER BY cntr_value DESC
                     ), 0.0) AS FLOAT) AS cpu_usage,
-                    
+
                     -- Memory Usage (%)
-                    CAST(100.0 * (SELECT used_kb FROM memory_used) / 
-                        NULLIF((SELECT total_physical_memory_kb FROM sys_info), 0) AS FLOAT) AS memory_usage,
-                    
+                    CAST(100.0 * (SELECT used_kb FROM memory_used) /
+                        NULLIF((SELECT total_memory_kb FROM sys_info), 0) AS FLOAT) AS memory_usage,
+
                     -- IO Wait
                     CAST((SELECT ISNULL(AVG(CAST(wait_time_ms AS FLOAT)), 0) FROM sys.dm_os_wait_stats WHERE wait_type LIKE 'PAGEIOLATCH%') / 1000.0 AS FLOAT) AS io_wait,
-                    
+
                     -- TempDB Usage - simplified
                     CAST(50.0 AS FLOAT) AS tempdb_usage,
-                    
+
                     -- Active Connections
                     (SELECT COUNT(*) FROM sys.dm_exec_sessions WHERE session_id > 50) AS active_connections,
-                    
+
                     -- Longest Running Query
                     (SELECT ISNULL(MAX(DATEDIFF(MINUTE, r.start_time, GETDATE())), 0)
                      FROM sys.dm_exec_requests r
@@ -407,13 +385,13 @@ public class AXDatabaseService : IAXDatabaseService
             await connection.OpenAsync();
 
             var query = @"
-                SELECT 
+                SELECT
                     CAPTION,
                     STARTDATETIME,
                     ENDDATETIME,
                     REASON,
                     CREATEDDATETIME
-                FROM BrasBatchJobHistoryTable
+                FROM BrasBatchJobHistoryTable WITH (NOLOCK)
                 WHERE 1=1";
 
             if (!string.IsNullOrEmpty(captionPattern))
@@ -534,8 +512,8 @@ public class AXDatabaseService : IAXDatabaseService
 
             // Get total count
             var countQuery = $@"
-                SELECT COUNT(*) 
-                FROM BrasBatchJobHistoryTable
+                SELECT COUNT(*)
+                FROM BrasBatchJobHistoryTable WITH (NOLOCK)
                 {whereClause}";
 
             using var countCommand = new SqlCommand(countQuery, connection);
@@ -544,13 +522,13 @@ public class AXDatabaseService : IAXDatabaseService
 
             // Get paged results
             var query = $@"
-                SELECT 
+                SELECT
                     CAPTION,
                     STARTDATETIME,
                     ENDDATETIME,
                     REASON,
                     CREATEDDATETIME
-                FROM BrasBatchJobHistoryTable
+                FROM BrasBatchJobHistoryTable WITH (NOLOCK)
                 {whereClause}
                 ORDER BY STARTDATETIME DESC
                 OFFSET {skip} ROWS
@@ -659,7 +637,7 @@ public class AXDatabaseService : IAXDatabaseService
             // First, try to find the session in SYSCLIENTSESSIONS to get additional context
             var axSessionQuery = @"
                 SELECT TOP 1 SESSIONID, USERID, SERVERID
-                FROM SYSCLIENTSESSIONS 
+                FROM SYSCLIENTSESSIONS WITH (NOLOCK)
                 WHERE SESSIONID = @SessionId AND STATUS = 1"; // Active only
 
             string? userId = null;
@@ -724,6 +702,133 @@ public class AXDatabaseService : IAXDatabaseService
         {
             _logger.LogError(ex, "Error killing session {SessionId}: {ErrorMessage}", sessionId, ex.Message);
             return false;
+        }
+    }
+
+    public async Task<List<WaitStat>> GetWaitStatsAsync(int topN = 20)
+    {
+        var waitStats = new List<WaitStat>();
+        
+        try
+        {
+            using var connection = new SqlConnection(_connectionString);
+            await connection.OpenAsync();
+
+            var query = $@"
+                SELECT TOP {topN}
+                    wait_type AS WaitType,
+                    waiting_tasks_count AS WaitCount,
+                    wait_time_ms AS WaitTimeMs,
+                    max_wait_time_ms AS MaxWaitTimeMs,
+                    signal_wait_time_ms AS SignalWaitTimeMs
+                FROM sys.dm_os_wait_stats
+                WHERE wait_type NOT IN (
+                    'CLR_SEMAPHORE', 'LAZYWRITER_SLEEP', 'RESOURCE_QUEUE',
+                    'SLEEP_TASK', 'SLEEP_SYSTEMTASK', 'SQLTRACE_BUFFER_FLUSH',
+                    'WAITFOR', 'LOGMGR_QUEUE', 'CHECKPOINT_QUEUE',
+                    'REQUEST_FOR_DEADLOCK_SEARCH', 'XE_TIMER_EVENT', 'BROKER_TO_FLUSH',
+                    'BROKER_TASK_STOP', 'CLR_MANUAL_EVENT', 'CLR_AUTO_EVENT',
+                    'DISPATCHER_QUEUE_SEMAPHORE', 'FT_IFTS_SCHEDULER_IDLE_WAIT',
+                    'XE_DISPATCHER_WAIT', 'XE_DISPATCHER_JOIN', 'SQLTRACE_INCREMENTAL_FLUSH_SLEEP'
+                )
+                ORDER BY wait_time_ms DESC";
+
+            using var command = new SqlCommand(query, connection);
+            command.CommandTimeout = 30;
+
+            using var reader = await command.ExecuteReaderAsync();
+            var totalWaitTime = 0.0;
+            var stats = new List<WaitStat>();
+
+            while (await reader.ReadAsync())
+            {
+                var waitTime = reader.GetDouble(2);
+                totalWaitTime += waitTime;
+                
+                stats.Add(new WaitStat
+                {
+                    WaitType = reader.GetString(0),
+                    WaitCount = reader.GetInt64(1),
+                    WaitTimeMs = waitTime,
+                    MaxWaitTimeMs = reader.GetDouble(3),
+                    SignalWaitTimeMs = reader.GetDouble(4)
+                });
+            }
+
+            // Calculate percentages
+            foreach (var stat in stats)
+            {
+                stat.Percentage = totalWaitTime > 0 ? (stat.WaitTimeMs / totalWaitTime) * 100 : 0;
+            }
+
+            return stats;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting wait stats");
+            throw;
+        }
+    }
+
+    public async Task<List<TopQuery>> GetTopQueriesAsync(int topN = 20, double minDurationMs = 0)
+    {
+        var topQueries = new List<TopQuery>();
+        
+        try
+        {
+            using var connection = new SqlConnection(_connectionString);
+            await connection.OpenAsync();
+
+            var query = $@"
+                SELECT TOP {topN}
+                    DB_NAME(qp.dbid) AS DatabaseName,
+                    SUBSTRING(qt.text, (qs.statement_start_offset/2)+1,
+                        ((CASE qs.statement_end_offset
+                            WHEN -1 THEN DATALENGTH(qt.text)
+                            ELSE qs.statement_end_offset
+                        END - qs.statement_start_offset)/2)+1) AS QueryText,
+                    qs.execution_count AS ExecutionCount,
+                    qs.total_elapsed_time / 1000.0 AS TotalDurationMs,
+                    qs.total_elapsed_time / qs.execution_count / 1000.0 AS AvgDurationMs,
+                    qs.max_elapsed_time / 1000.0 AS MaxDurationMs,
+                    qs.min_elapsed_time / 1000.0 AS MinDurationMs,
+                    qs.total_logical_reads AS TotalLogicalReads,
+                    qs.total_physical_reads AS TotalPhysicalReads,
+                    qs.last_execution_time AS LastExecutionTime
+                FROM sys.dm_exec_query_stats qs
+                CROSS APPLY sys.dm_exec_sql_text(qs.sql_handle) qt
+                CROSS APPLY sys.dm_exec_query_plan(qs.plan_handle) qp
+                WHERE qs.total_elapsed_time / qs.execution_count / 1000.0 >= {minDurationMs}
+                ORDER BY qs.total_elapsed_time DESC";
+
+            using var command = new SqlCommand(query, connection);
+            command.CommandTimeout = 60;
+
+            using var reader = await command.ExecuteReaderAsync();
+            
+            while (await reader.ReadAsync())
+            {
+                topQueries.Add(new TopQuery
+                {
+                    DatabaseName = reader.IsDBNull(0) ? "" : reader.GetString(0),
+                    QueryText = reader.IsDBNull(1) ? "" : reader.GetString(1),
+                    ExecutionCount = reader.GetInt64(2),
+                    TotalDurationMs = reader.GetDouble(3),
+                    AvgDurationMs = reader.GetDouble(4),
+                    MaxDurationMs = reader.GetDouble(5),
+                    MinDurationMs = reader.GetDouble(6),
+                    TotalLogicalReads = reader.GetInt64(7),
+                    TotalPhysicalReads = reader.GetInt64(8),
+                    LastExecutionTime = reader.GetDateTime(9)
+                });
+            }
+
+            return topQueries;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting top queries");
+            throw;
         }
     }
 }

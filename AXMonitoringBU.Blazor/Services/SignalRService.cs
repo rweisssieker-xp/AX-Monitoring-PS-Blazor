@@ -91,13 +91,20 @@ public class SignalRService : ISignalRService, IAsyncDisposable
         {
             try
             {
-                await _hubConnection.StartAsync();
+                // Add timeout to prevent hanging during connection
+                using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+                await _hubConnection.StartAsync(cts.Token);
                 _logger.LogInformation("SignalR connection started");
+            }
+            catch (OperationCanceledException)
+            {
+                _logger.LogWarning("SignalR connection timed out after 10 seconds");
+                // Don't throw - allow app to continue without SignalR
             }
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error starting SignalR connection");
-                throw;
+                // Don't throw - allow app to continue without SignalR
             }
         }
     }

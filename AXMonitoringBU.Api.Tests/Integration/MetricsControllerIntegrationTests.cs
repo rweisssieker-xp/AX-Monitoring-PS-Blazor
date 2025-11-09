@@ -7,29 +7,82 @@ using System.Net;
 using System.Net.Http.Json;
 using AXMonitoringBU.Api.Data;
 using AXMonitoringBU.Api.Models;
+using AXMonitoringBU.Api;
 
 namespace AXMonitoringBU.Api.Tests.Integration;
 
-// Note: Integration tests require a custom WebApplicationFactory setup
-// For now, these are placeholder tests that would need proper setup
-public class MetricsControllerIntegrationTests
+public class MetricsControllerIntegrationTests : IClassFixture<WebApplicationFactory<Program>>
 {
-    // Integration tests require proper WebApplicationFactory setup
-    // This would need to be configured based on your specific setup
-    // For now, these tests are skipped as they require running application
-    
-    [Fact(Skip = "Requires WebApplicationFactory setup")]
-    public async Task GetCurrentMetrics_ShouldReturnSuccess()
+    private readonly WebApplicationFactory<Program> _factory;
+    private readonly HttpClient _client;
+
+    public MetricsControllerIntegrationTests(WebApplicationFactory<Program> factory)
     {
-        // This test would require a properly configured WebApplicationFactory
-        // and running application instance
+        _factory = factory.WithWebHostBuilder(builder =>
+        {
+            builder.ConfigureServices(services =>
+            {
+                // Replace database with in-memory database for testing
+                var descriptor = services.SingleOrDefault(
+                    d => d.ServiceType == typeof(DbContextOptions<AXDbContext>));
+                if (descriptor != null)
+                {
+                    services.Remove(descriptor);
+                }
+
+                services.AddDbContext<AXDbContext>(options =>
+                {
+                    options.UseInMemoryDatabase("TestDb_" + Guid.NewGuid().ToString());
+                });
+
+                // Ensure database is created
+                var sp = services.BuildServiceProvider();
+                using (var scope = sp.CreateScope())
+                {
+                    var scopedServices = scope.ServiceProvider;
+                    var db = scopedServices.GetRequiredService<AXDbContext>();
+                    db.Database.EnsureCreated();
+                }
+            });
+        });
+
+        _client = _factory.CreateClient();
     }
 
-    [Fact(Skip = "Requires WebApplicationFactory setup")]
+    [Fact]
+    public async Task GetCurrentMetrics_ShouldReturnSuccess()
+    {
+        // Act
+        var response = await _client.GetAsync("/api/v1/metrics/current");
+
+        // Assert
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var content = await response.Content.ReadAsStringAsync();
+        content.Should().NotBeNullOrEmpty();
+    }
+
+    [Fact]
     public async Task GetHealth_ShouldReturnSuccess()
     {
-        // This test would require a properly configured WebApplicationFactory
-        // and running application instance
+        // Act
+        var response = await _client.GetAsync("/health");
+
+        // Assert
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var content = await response.Content.ReadAsStringAsync();
+        content.Should().NotBeNullOrEmpty();
+    }
+
+    [Fact]
+    public async Task GetKpis_ShouldReturnSuccess()
+    {
+        // Act
+        var response = await _client.GetAsync("/api/v1/metrics/kpis");
+
+        // Assert
+        response.StatusCode.Should().Be(HttpStatusCode.OK);
+        var content = await response.Content.ReadAsStringAsync();
+        content.Should().NotBeNullOrEmpty();
     }
 }
 

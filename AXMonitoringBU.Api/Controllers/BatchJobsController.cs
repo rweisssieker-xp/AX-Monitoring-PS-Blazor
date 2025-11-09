@@ -4,7 +4,11 @@ using AXMonitoringBU.Api.Models;
 
 namespace AXMonitoringBU.Api.Controllers;
 
+/// <summary>
+/// Controller for managing batch jobs
+/// </summary>
 [ApiController]
+[ApiVersion("1.0")]
 [Route("api/v1/batch-jobs")]
 public class BatchJobsController : ControllerBase
 {
@@ -22,6 +26,11 @@ public class BatchJobsController : ControllerBase
         _logger = logger;
     }
 
+    /// <summary>
+    /// Retrieves all batch jobs, optionally filtered by status
+    /// </summary>
+    /// <param name="status">Optional status filter (Waiting, Executing, Error, Finished)</param>
+    /// <returns>List of batch jobs</returns>
     [HttpGet]
     public async Task<IActionResult> GetBatchJobs([FromQuery] string? status = null)
     {
@@ -81,12 +90,12 @@ public class BatchJobsController : ControllerBase
     }
 
     [HttpGet("export/csv")]
-    public async Task<IActionResult> ExportBatchJobsToCsv([FromQuery] string? status = null)
+    public async Task<IActionResult> ExportBatchJobsToCsv([FromQuery] string? status = null, [FromQuery] string? template = null)
     {
         try
         {
             var batchJobs = await _batchJobService.GetBatchJobsAsync(status);
-            var csvBytes = await _exportService.ExportBatchJobsToCsvAsync(batchJobs);
+            var csvBytes = await _exportService.ExportBatchJobsToCsvAsync(batchJobs, template);
             var filename = $"batch_jobs_{DateTime.UtcNow:yyyyMMdd_HHmmss}.csv";
             return File(csvBytes, "text/csv", filename);
         }
@@ -98,12 +107,12 @@ public class BatchJobsController : ControllerBase
     }
 
     [HttpGet("export/excel")]
-    public async Task<IActionResult> ExportBatchJobsToExcel([FromQuery] string? status = null)
+    public async Task<IActionResult> ExportBatchJobsToExcel([FromQuery] string? status = null, [FromQuery] string? template = null)
     {
         try
         {
             var batchJobs = await _batchJobService.GetBatchJobsAsync(status);
-            var excelBytes = await _exportService.ExportBatchJobsToExcelAsync(batchJobs);
+            var excelBytes = await _exportService.ExportBatchJobsToExcelAsync(batchJobs, template);
             var filename = $"batch_jobs_{DateTime.UtcNow:yyyyMMdd_HHmmss}.xlsx";
             return File(excelBytes, "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", filename);
         }
